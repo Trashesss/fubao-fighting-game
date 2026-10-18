@@ -155,14 +155,14 @@ export function bindWeights(geometry: BufferGeometry, rig: SharkRig, cage: Shark
   geometry.setAttribute('skinWeight', new Float32BufferAttribute(weight, 4));
 }
 
-const DEG = Math.PI / 180;
+export const DEG = Math.PI / 180;
 
 export function applySwimPose(rig: SharkRig): void {
   for (const b of rig.skeleton.bones) b.quaternion.identity();
 }
 
 /** 뼈의 자식 방향(뼈 → 다음 뼈)이 월드 방향 target 을 향하도록 돌린다 */
-function aimBone(bone: Bone, next: Bone, target: Vector3): void {
+export function aimBone(bone: Bone, next: Bone, target: Vector3): void {
   bone.updateWorldMatrix(true, true);
   const from = next.getWorldPosition(new Vector3()).sub(bone.getWorldPosition(new Vector3())).normalize();
   const turn = new Quaternion().setFromUnitVectors(from, target.clone().normalize());
@@ -189,12 +189,19 @@ const STANDING_BENDS: [number, number, number][] = [
 const STANDING_ROOT_TILT = -90;
 
 function distributeBends(rig: SharkRig, bends: [number, number, number][]): void {
-  for (const [from, to, total] of bends) {
-    const inside = rig.spine.filter((b) => (b.userData.u as number) > from && (b.userData.u as number) < to);
-    const shape = inside.map((b) => Math.sin((Math.PI * ((b.userData.u as number) - from)) / (to - from)) ** 2);
-    const sum = shape.reduce((a, b) => a + b, 0);
-    inside.forEach((b, k) => (b.rotation.x += ((total * shape[k]) / sum) * DEG));
-  }
+  for (const [from, to, total] of bends) bendRegion(rig, from, to, total, 'x');
+}
+
+/**
+ * 구간 (from, to) 안의 척추 뼈에 총 각도를 sin² 모양으로 나눠 더한다 (한 뼈에 몰면 안쪽이 접힌다).
+ * 축은 뼈 로컬: x = 앞뒤 굽힘, y = 옆 굽힘(상어가 헤엄칠 때 꼬리를 흔드는 방향), z = 몸 축 비틀기.
+ */
+export function bendRegion(rig: SharkRig, from: number, to: number, totalDeg: number, axis: 'x' | 'y' | 'z'): void {
+  if (totalDeg === 0) return;
+  const inside = rig.spine.filter((b) => (b.userData.u as number) > from && (b.userData.u as number) < to);
+  const shape = inside.map((b) => Math.sin((Math.PI * ((b.userData.u as number) - from)) / (to - from)) ** 2);
+  const sum = shape.reduce((a, b) => a + b, 0);
+  inside.forEach((b, k) => (b.rotation[axis] += ((totalDeg * shape[k]) / sum) * DEG));
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   Group,
   Mesh,
   MeshPhysicalMaterial,
+  Object3D,
   Quaternion,
   SkinnedMesh,
   SphereGeometry,
@@ -17,6 +18,7 @@ import { fitCageToTargets, subdivideLevels, toBufferGeometry } from '../../proce
 import { smoothstep } from '../../procedural/profile';
 import { CAUDAL, EYE_H, EYE_RADIUS, EYE_U, LANDMARKS, bodyBottom, bodyTop, eyeSocket, sectionAt, thetaOf } from './sharkAnatomy';
 import { createSneaker } from './sneaker';
+import { NEUTRAL, SharkAnimator } from './sharkAnimator';
 import { TOTAL_LENGTH, U0, bodyColor, buildSharkCage, mix, toModel } from './sharkCage';
 import { buildSkinMaps } from './skinMaps';
 import { SPINE_STATIONS, applyStandingPose, applySwimPose, bindWeights, buildSharkRig, solveStandingTilt, type SharkRig } from './sharkRig';
@@ -30,6 +32,13 @@ import { SPINE_STATIONS, applyStandingPose, applySwimPose, bindWeights, buildSha
  */
 export { TOTAL_LENGTH };
 const TL = TOTAL_LENGTH;
+/** 밈 원본처럼 신발이 눈에 띄도록 실제 크기의 1.8배 (약 58 cm) */
+const SNEAKER_SCALE = 1.8;
+
+/** createBukangiModel 이 만든 캐릭터의 애니메이터 (헤엄 자세로 만들었어도 있다) */
+export function bukangiAnimator(model: Group): SharkAnimator {
+  return model.userData.animator as SharkAnimator;
+}
 
 export interface BukangiModelOptions {
   /** 서브디비전 단계 (4 ≈ 24만 사각형, 게임용은 3) */
@@ -226,8 +235,7 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
   const lobeRows = cage.finRows['caudal-fin-lower'];
   const lobeTip = new Vector3(...lobeRows[lobeRows.length - 1].center);
   const withShoe = options.shoe ?? true;
-  // 밈 원본처럼 신발이 눈에 띄도록 실제 크기의 1.8배 (약 58 cm)
-  const sneaker = withShoe ? createSneaker(1.8) : null;
+  const sneaker = withShoe ? createSneaker(SNEAKER_SCALE) : null;
   const tilt = solveStandingTilt(rig, upperTip, lobeTip, sneaker ? sneaker.collar.y : 0);
   applyStandingPose(rig, tilt);
   root.updateMatrixWorld(true);
@@ -241,12 +249,64 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     root.updateMatrixWorld(true);
     tailBone.attach(sneaker.group);
   }
-  if ((options.pose ?? 'stand') === 'swim') applySwimPose(rig);
+
+  // ── 애니메이터: 접지점 · 판정 소켓 · 피격 캡슐 ─────────────────────────────
+  /** 바인드 포즈 위치를 따르는 빈 노드를 뼈에 단다 (지금 자세와 관계없이 맞는 자리에 붙는다) */
+  const socketAt = (name: string, bone: Bone, bind: Vector3) => {
+    const o = new Object3D();
+    o.name = `socket-${name}`;
+    o.position.copy(bind).applyMatrix4(rig.skeleton.boneInverses[rig.skeleton.bones.indexOf(bone)]);
+    bone.add(o);
+    return o;
+  };
+  const shoeMarkers: Object3D[] = [];
+  if (sneaker) {
+    for (const [name, z] of [['heel', 0.05], ['mid', 0.16], ['toe', 0.26]] as const) {
+      const m = new Object3D();
+      m.name = `contact-shoe-${name}`;
+      m.position.set(0, 0, z * SNEAKER_SCALE);
+      sneaker.group.add(m);
+      shoeMarkers.push(m);
+    }
+  } else {
+    shoeMarkers.push(socketAt('lobe-tip', spineBoneAt(rig, 0.83), lobeTip));
+  }
+  const tailTip = socketAt('tail-tip', spineBoneAt(rig, CAUDAL.end), upperTip);
   root.updateMatrixWorld(true);
-  body.computeBoundingBox();
-  // 바닥(y=0)에 세운다
-  root.position.y = -new Box3().setFromObject(root).min.y;
+  const animator = new SharkAnimator(root, rig, { tailTip, shoe: shoeMarkers }, tilt);
+
+  // 판정 소켓: 몸 축 위 점들 (피격 캡슐 양끝) + 공격에 쓸 끝점들
+  const axisSocket = (u: number) => socketAt(`axis-${u}`, spineBoneAt(rig, u), toModel(0, (bodyTop(u) + bodyBottom(u)) / 2, u));
+  const halfHeight = (a: number, b: number) => {
+    let m = 0;
+    for (let u = a; u <= b; u += 0.01) m = Math.max(m, (bodyTop(u) - bodyBottom(u)) / 2);
+    return m * TL;
+  };
+  for (const [name, a, b, r] of [
+    ['head', 0.03, 0.2, halfHeight(0.03, 0.2) * 0.85],
+    ['trunk', 0.2, 0.55, halfHeight(0.2, 0.55) * 0.95],
+    ['tail', 0.55, 0.8, halfHeight(0.55, 0.8)],
+  ] as const) {
+    animator.addHurtbox(name, axisSocket(a), axisSocket(b), r);
+  }
+  animator.sockets.set('snout', socketAt('snout', rig.spine[0], toModel(0, (bodyTop(0) + bodyBottom(0)) / 2, 0)));
+  for (const side of ['R', 'L']) {
+    const chain = rig.limbs[`pectoral-fin-${side}`];
+    const rows = cage.finRows[`pectoral-fin-${side}`];
+    animator.sockets.set(`pec${side}-tip`, socketAt(`pec${side}-tip`, chain[2], new Vector3(...rows[rows.length - 1].center)));
+  }
+  animator.sockets.set('tail-tip', tailTip);
+  if (sneaker) animator.sockets.set('shoe', shoeMarkers[1]);
+
+  if ((options.pose ?? 'stand') === 'swim') {
+    applySwimPose(rig);
+    root.updateMatrixWorld(true);
+    root.position.y = -new Box3().setFromObject(root).min.y;
+  } else {
+    animator.apply(NEUTRAL);
+  }
   root.updateMatrixWorld(true);
+  root.userData.animator = animator;
 
   const landmark = (u: number, h: number) => posed(toModel(0, h, u), spineBoneAt(rig, u));
   const limbLandmark = (name: string) => posed(new Vector3(...cage.finCenters[name]), rig.limbs[name][1]);

@@ -25,7 +25,11 @@ import {
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { createBukangiModel } from '../characters/bukangi/createBukangiModel';
+import { bukangiAnimator, createBukangiModel } from '../characters/bukangi/createBukangiModel';
+import { CLIPS } from '../characters/bukangi/moves';
+import { NEUTRAL } from '../characters/bukangi/sharkAnimator';
+import { samplePose } from '../animation/poseClip';
+import { Timeline } from './timeline';
 import { qualityReport } from '../characters/bukangi/qualityReport';
 
 /**
@@ -34,7 +38,10 @@ import { qualityReport } from '../characters/bukangi/qualityReport';
  *   cam=ortho          직교 카메라 (측면 실루엣 비교)
  *   mode=silhouette    흰 배경에 검은 실루엣
  *   mode=zebra         얼룩말 반사 — 흑백 줄무늬 환경을 거울 재질로 비춰 곡면의 출렁임·구김을 찾는다
- *   check=1            곡률 검사 결과를 #check 에 JSON 으로 쓴다
+ *   check=1            곡률 검사 + 동작 접지 검사 결과를 #check 에 JSON 으로 쓴다
+ *   anim=idle          재생할 동작 (서 있는 자세에서 기본 idle)
+ *   frame=N            그 프레임에 멈춘다 (스크린샷용)
+ *   boxes=1            피격 캡슐 표시
  *   light=sea          사실감 판단용 조명 (위에서 내리는 차가운 빛 + 약한 안개)
  *   pose=swim          바인드 포즈 (헤엄치는 자세) — 기본은 서 있는 격투 자세
  *   shoe=0             운동화 빼기 (사진 실루엣 비교용)
@@ -112,11 +119,35 @@ model.position.y += -rawBox.min.y + (params.get('pose') === 'swim' ? 0.12 : 0);
 scene.add(model);
 (window as unknown as { model: Object3D }).model = model;
 
+const standing = params.get('pose') !== 'swim';
+const animator = bukangiAnimator(model);
+
 if (params.get('check') === '1') {
   const pre = document.createElement('pre');
   pre.id = 'check';
+  // 곡률 검사는 바인드 포즈(헤엄)를 기준으로 하므로 메시 정중선은 자세와 관계없이 같다
   const s = new Box3().setFromObject(model).getSize(new Vector3());
-  pre.textContent = JSON.stringify({ ...qualityReport(model), cage: model.userData.sculptRuntime.cage, size: s.toArray().map((v) => +v.toFixed(3)) });
+  // 동작 접지 검사: 매 프레임 꼬리 끝·신발 높이와 신발 미끄러짐
+  const motion: Record<string, { maxGap: number; maxSlip: number; minY: number }> = {};
+  if (standing) {
+    for (const clip of Object.values(CLIPS)) {
+      let maxGap = 0;
+      let maxSlip = 0;
+      let minY = Infinity;
+      let z0 = NaN;
+      for (let f = 0; f < clip.length; f++) {
+        animator.apply(samplePose(clip, f, NEUTRAL));
+        const c = animator.contactReport();
+        maxGap = Math.max(maxGap, Math.abs(c.tailY - c.shoeY));
+        minY = Math.min(minY, c.tailY, c.shoeY);
+        if (Number.isNaN(z0)) z0 = c.shoeZ;
+        maxSlip = Math.max(maxSlip, Math.abs(c.shoeZ - z0));
+      }
+      motion[clip.name] = { maxGap: +maxGap.toFixed(5), maxSlip: +maxSlip.toFixed(5), minY: +minY.toFixed(5) };
+    }
+    animator.apply(NEUTRAL);
+  }
+  pre.textContent = JSON.stringify({ ...qualityReport(model), cage: model.userData.sculptRuntime.cage, size: s.toArray().map((v) => +v.toFixed(3)), motion });
   document.body.appendChild(pre);
 }
 
@@ -278,7 +309,24 @@ addEventListener('resize', () => {
   setView(params.get('view') ?? 'three-quarter');
 });
 
+// ── 동작 타임라인 (서 있는 자세만) ───────────────────────────────────────────
+let timeline: Timeline | null = null;
+if (standing && !silhouette) {
+  const clip = CLIPS[params.get('anim') ?? 'idle'] ?? CLIPS.idle;
+  timeline = new Timeline(animator, CLIPS, clip, NEUTRAL, scene);
+  if (params.has('frame')) {
+    timeline.setPlaying(false);
+    timeline.frame = Number(params.get('frame'));
+    timeline.apply();
+  }
+  if (params.get('boxes') === '1') timeline.showBoxes(true);
+}
+
+let last = performance.now();
 renderer.setAnimationLoop(() => {
+  const now = performance.now();
+  timeline?.update(Math.min(0.1, (now - last) / 1000));
+  last = now;
   controls.update();
   renderer.render(scene, camera);
 });

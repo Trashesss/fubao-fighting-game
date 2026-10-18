@@ -1,0 +1,89 @@
+/**
+ * 손잡이(채널) 값으로 정의하는 포즈 클립. 뼈 회전을 직접 키로 잡지 않고
+ * "머리 숙임 12°", "왼팔 들기 30°" 같은 채널을 키로 잡은 뒤 캐릭터별 애니메이터가 뼈로 옮긴다.
+ *
+ * 시간 단위는 60fps 프레임 (격투게임 프레임 데이터와 같은 단위).
+ * 키에 적지 않은 채널은 앞 키의 값을 이어받는다 (첫 키는 기본값에서 시작).
+ */
+export type PoseChannels = Record<string, number>;
+
+export type Ease = 'smooth' | 'linear' | 'hold' | 'in' | 'out';
+
+export interface PoseKey {
+  f: number;
+  pose: PoseChannels;
+  /** 이 키에서 다음 키로 가는 구간의 보간 */
+  ease?: Ease;
+}
+
+export interface PoseClip {
+  name: string;
+  /** 전체 길이 (프레임). 반복 클립은 length 에서 첫 키로 돌아간다 */
+  length: number;
+  loop: boolean;
+  keys: PoseKey[];
+}
+
+export const FPS = 60;
+
+/** 모든 키를 채널 전체로 채운다 (이어받기 규칙 적용) */
+function resolveKeys(clip: PoseClip, defaults: PoseChannels): PoseChannels[] {
+  const out: PoseChannels[] = [];
+  let prev = { ...defaults };
+  for (const key of clip.keys) {
+    prev = { ...prev, ...key.pose };
+    out.push(prev);
+  }
+  return out;
+}
+
+export function samplePose(clip: PoseClip, frame: number, defaults: PoseChannels): PoseChannels {
+  const poses = resolveKeys(clip, defaults);
+  const keys = clip.keys;
+  const n = keys.length;
+  if (n === 1) return poses[0];
+
+  const f = clip.loop ? ((frame % clip.length) + clip.length) % clip.length : Math.max(keys[0].f, Math.min(clip.length, frame));
+
+  // 정수 인덱스 k 의 키 (반복 클립은 앞뒤 주기로 이어 붙이고, 아니면 양끝에 고정)
+  const wrap = (k: number) => ((k % n) + n) % n;
+  const keyTime = (k: number) => (clip.loop ? keys[wrap(k)].f + Math.floor(k / n) * clip.length : keys[Math.max(0, Math.min(n - 1, k))].f);
+  const keyPose = (k: number) => poses[clip.loop ? wrap(k) : Math.max(0, Math.min(n - 1, k))];
+
+  // f 가 속한 구간 [i, i+1]. 반복 클립은 첫 키 앞(0 ~ keys[0].f)을 앞 주기의 마지막 구간으로 본다
+  let i = -1;
+  for (let k = 0; k < n; k++) if (keys[k].f <= f) i = k;
+  if (!clip.loop && i >= n - 1) return poses[n - 1];
+  if (!clip.loop && i < 0) return poses[0];
+
+  const t0 = keyTime(i);
+  const t1 = keyTime(i + 1);
+  const u = Math.min(1, Math.max(0, (f - t0) / Math.max(1e-6, t1 - t0)));
+  const ease = keys[wrap(i)].ease ?? 'smooth';
+  const tm = keyTime(i - 1);
+  const t2 = keyTime(i + 2);
+
+  const out: PoseChannels = {};
+  const A = keyPose(i);
+  const B = keyPose(i + 1);
+  const P = keyPose(i - 1);
+  const Q = keyPose(i + 2);
+  for (const ch of Object.keys(A)) {
+    const p1 = A[ch];
+    const p2 = B[ch];
+    if (ease === 'hold') out[ch] = p1;
+    else if (ease === 'linear') out[ch] = p1 + (p2 - p1) * u;
+    else if (ease === 'in') out[ch] = p1 + (p2 - p1) * u * u;
+    else if (ease === 'out') out[ch] = p1 + (p2 - p1) * (1 - (1 - u) * (1 - u));
+    else {
+      // Catmull-Rom: 비균등 간격이라 기울기를 시간으로 나눠 맞춘다. 고정된 끝에서는 기울기 0 (부드럽게 멈춤)
+      const dt = t1 - t0;
+      const m1 = t0 > tm ? ((p2 - P[ch]) / (t1 - tm)) * dt : 0;
+      const m2 = t2 > t1 ? ((Q[ch] - p1) / (t2 - t0)) * dt : 0;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      out[ch] = (2 * u3 - 3 * u2 + 1) * p1 + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * p2 + (u3 - u2) * m2;
+    }
+  }
+  return out;
+}
