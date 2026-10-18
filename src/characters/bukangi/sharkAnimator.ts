@@ -11,14 +11,16 @@ import { DEG, aimBone, applySwimPose, bendRegion, type SharkRig } from './sharkR
  *   support     1 = 꼬리 위 엽 끝과 신발이 함께 바닥에 닿도록 기울기를 푼다, 0 = 풀지 않는다
  *   hop         가장 낮은 접지점의 높이 (점프·깡총)
  *   slide       신발을 고정할 앞뒤 위치 (+ = 앞으로). anchor=1 이면 몸이 신발을 따라온다
- *   anchor      1 = 신발(없으면 꼬리 끝)을 바닥에 고정해 미끄러지지 않게 한다
+ *   tailSlide   꼬리 위 엽 끝을 고정할 앞뒤 위치 (anchorTail=1 일 때)
+ *   anchor      1 = 고정점을 바닥에 고정해 미끄러지지 않게 한다
+ *   anchorTail  고정점 선택: 0 = 신발, 1 = 꼬리 위 엽 끝 (걸을 때 번갈아 딛는다)
  *   head*, trunk*, tail*   척추 구간 굽힘: Pitch(+ = 앞/배 쪽으로), Side(+ = 오른쪽으로), Twist(+ = 오른쪽이 뒤로)
  *   pecR/L_*    가슴지느러미(팔): yaw(+ = 바깥으로), pitch(+ = 위로), elbow(+ = 끝을 위로), elbowYaw
  *   pelR/L_*    배지느러미(발): 같은 규칙, knee 가 끝마디
  *   jaw         입 벌림 (턱 뼈가 생기면 쓴다)
  */
 export const CHANNELS = [
-  'tilt', 'support', 'hop', 'slide', 'anchor',
+  'tilt', 'support', 'hop', 'slide', 'tailSlide', 'anchor', 'anchorTail',
   'headPitch', 'headSide', 'headTwist',
   'trunkPitch', 'trunkSide', 'trunkTwist',
   'tailPitch', 'tailSide', 'tailTipPitch', 'tailTipSide',
@@ -65,6 +67,7 @@ export class SharkAnimator {
   private readonly bindRootPos: Vector3;
   private neutralTilt = 0;
   private neutralAnchorZ = 0;
+  private neutralTailZ = 0;
   /** 기본 자세에서 각 지느러미 부모 뼈의 방향 (캐릭터 좌표) — 지느러미가 몸을 따라 돌게 하는 기준 */
   private readonly limbParentRest = new Map<Bone, Quaternion>();
   private lastSolvedTilt = 0;
@@ -84,6 +87,7 @@ export class SharkAnimator {
     for (const chain of Object.values(rig.limbs)) this.limbParentRest.set(chain[0], this.localQuat(chain[0].parent!));
     this.apply(NEUTRAL, false);
     this.neutralAnchorZ = this.local(this.anchorPoint()).z;
+    this.neutralTailZ = this.local(this.contacts.tailTip).z;
     this.apply(NEUTRAL);
   }
 
@@ -167,8 +171,11 @@ export class SharkAnimator {
     return (lo + hi) / 2;
   }
 
-  apply(c: PoseChannels, ground = true): void {
+  apply(raw: PoseChannels, ground = true): void {
     const rig = this.rig;
+    // 0~1 채널은 보간이 넘쳐도 범위 안으로
+    const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+    const c: PoseChannels = { ...raw, support: clamp01(raw.support), anchor: clamp01(raw.anchor), anchorTail: clamp01(raw.anchorTail), hop: Math.max(0, raw.hop) };
     // 뿌리 뼈 회전은 −90° 가 수직이고 덜 음수일수록 앞으로 숙는다.
     // support=1 이면 두 점이 함께 닿는 해를 쓴다 (몸이 굳은 막대라 그때 tilt 는 꼬리 굽힘으로만 낼 수 있다)
     const free = this.neutralTilt + c.tilt;
@@ -199,17 +206,21 @@ export class SharkAnimator {
     // 접지: 가장 낮은 접지점을 hop 높이에, 신발은 slide 위치에 고정
     const points = [this.contacts.tailTip, ...this.contacts.shoe].map((o) => this.local(o));
     const lowest = Math.min(...points.map((p) => p.y));
-    const dz = (this.neutralAnchorZ + c.slide - this.local(this.anchorPoint()).z) * c.anchor;
+    const dzShoe = this.neutralAnchorZ + c.slide - this.local(this.anchorPoint()).z;
+    const dzTail = this.neutralTailZ + c.tailSlide - this.local(this.contacts.tailTip).z;
+    const dz = (dzShoe * (1 - c.anchorTail) + dzTail * c.anchorTail) * c.anchor;
     rig.root.position.copy(this.bindRootPos).add(new Vector3(0, c.hop - lowest, dz));
     rig.root.updateWorldMatrix(true, true);
   }
 
-  /** 검사용: 접지점의 현재 높이와 신발 앞뒤 위치 */
-  contactReport(): { tailY: number; shoeY: number; shoeZ: number } {
+  /** 검사용: 접지점의 현재 높이와 앞뒤 위치 (캐릭터 좌표) */
+  contactReport(): { tailY: number; shoeY: number; tailZ: number; shoeZ: number } {
     return {
       tailY: this.local(this.contacts.tailTip).y,
       shoeY: Math.min(...this.contacts.shoe.map((o) => this.local(o).y)),
+      tailZ: this.local(this.contacts.tailTip).z,
       shoeZ: this.local(this.anchorPoint()).z,
     };
   }
+
 }

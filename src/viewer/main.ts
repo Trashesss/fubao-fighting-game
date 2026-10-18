@@ -127,27 +127,50 @@ if (params.get('check') === '1') {
   pre.id = 'check';
   // 곡률 검사는 바인드 포즈(헤엄)를 기준으로 하므로 메시 정중선은 자세와 관계없이 같다
   const s = new Box3().setFromObject(model).getSize(new Vector3());
-  // 동작 접지 검사: 매 프레임 꼬리 끝·신발 높이와 신발 미끄러짐
-  const motion: Record<string, { maxGap: number; maxSlip: number; minY: number }> = {};
+  // 동작 접지 검사. 접지점(꼬리 위 엽 끝·신발)마다:
+  //   tailSkate / shoeSkate = 두 프레임 연속 바닥에 닿아 있는 동안 앞뒤로 미끄러진 최대 거리 (발 미끄러짐).
+  //                           꼬리는 항상 0 이어야 하고, 신발은 걷기의 '끌기'에서만 움직인다
+  //   gap    = support=1 프레임에서 두 접지점 높이 차
+  //   minY   = 가장 낮은 접지점 높이 (바닥 아래로 들어가면 음수)
+  const motion: Record<string, { maxGap: number; tailSkate: number; shoeSkate: number; minY: number }> = {};
+  const ON_GROUND = 0.002;
+  // ?trace=<클립> : 프레임별 [f, tailY, shoeY, tailZ, shoeZ, support, anchorTail]
+  const traces: Record<string, (string | number)[][]> = {};
   if (standing) {
     for (const clip of Object.values(CLIPS)) {
       let maxGap = 0;
-      let maxSlip = 0;
+      let tailSkate = 0;
+      let shoeSkate = 0;
       let minY = Infinity;
-      let z0 = NaN;
-      for (let f = 0; f < clip.length; f++) {
-        animator.apply(samplePose(clip, f, NEUTRAL));
+      let prev: ReturnType<typeof animator.contactReport> | null = null;
+      const trace: (string | number)[][] = [];
+      const frames = clip.loop ? clip.length + 1 : clip.length;
+      for (let f = 0; f < frames; f++) {
+        const wrapped = clip.loop && f === clip.length;
+        const pose = samplePose(clip, wrapped ? 0 : f, NEUTRAL);
+        animator.apply(pose);
         const c = animator.contactReport();
-        maxGap = Math.max(maxGap, Math.abs(c.tailY - c.shoeY));
+        // 반복이 넘어가는 프레임은 rootMotion 만큼 옮긴 자리에서 다시 시작한다
+        if (wrapped) {
+          c.tailZ += clip.rootMotion ?? 0;
+          c.shoeZ += clip.rootMotion ?? 0;
+        }
+        if (pose.support >= 0.999) maxGap = Math.max(maxGap, Math.abs(c.tailY - c.shoeY));
         minY = Math.min(minY, c.tailY, c.shoeY);
-        if (Number.isNaN(z0)) z0 = c.shoeZ;
-        maxSlip = Math.max(maxSlip, Math.abs(c.shoeZ - z0));
+        if (prev) {
+          if (prev.tailY < ON_GROUND && c.tailY < ON_GROUND) tailSkate = Math.max(tailSkate, Math.abs(c.tailZ - prev.tailZ));
+          if (prev.shoeY < ON_GROUND && c.shoeY < ON_GROUND) shoeSkate = Math.max(shoeSkate, Math.abs(c.shoeZ - prev.shoeZ));
+        }
+        if (params.get('trace') === clip.name)
+          trace.push([f, ...[c.tailY, c.shoeY, c.tailZ, c.shoeZ].map((v) => +v.toFixed(4)), +pose.support.toFixed(2), +pose.anchorTail.toFixed(2)]);
+        prev = c;
       }
-      motion[clip.name] = { maxGap: +maxGap.toFixed(5), maxSlip: +maxSlip.toFixed(5), minY: +minY.toFixed(5) };
+      if (trace.length) traces[clip.name] = trace;
+      motion[clip.name] = { maxGap: +maxGap.toFixed(5), tailSkate: +tailSkate.toFixed(5), shoeSkate: +shoeSkate.toFixed(5), minY: +minY.toFixed(5) };
     }
     animator.apply(NEUTRAL);
   }
-  pre.textContent = JSON.stringify({ ...qualityReport(model), cage: model.userData.sculptRuntime.cage, size: s.toArray().map((v) => +v.toFixed(3)), motion });
+  pre.textContent = JSON.stringify({ ...qualityReport(model), cage: model.userData.sculptRuntime.cage, size: s.toArray().map((v) => +v.toFixed(3)), motion, traces });
   document.body.appendChild(pre);
 }
 
@@ -313,7 +336,7 @@ addEventListener('resize', () => {
 let timeline: Timeline | null = null;
 if (standing && !silhouette) {
   const clip = CLIPS[params.get('anim') ?? 'idle'] ?? CLIPS.idle;
-  timeline = new Timeline(animator, CLIPS, clip, NEUTRAL, scene);
+  timeline = new Timeline(animator, CLIPS, clip, NEUTRAL, scene, model);
   if (params.has('frame')) {
     timeline.setPlaying(false);
     timeline.frame = Number(params.get('frame'));

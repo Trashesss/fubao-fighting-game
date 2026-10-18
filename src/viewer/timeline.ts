@@ -1,11 +1,15 @@
-import { CapsuleGeometry, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3, type Scene } from 'three';
+import { CapsuleGeometry, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3, type Object3D, type Scene } from 'three';
 import { FPS, samplePose, type PoseClip, type PoseChannels } from '../animation/poseClip';
 import { capsuleSegment, type Hurtbox } from '../fighting/frameData';
 
 /**
  * 뷰어 타임라인: 클립 재생·일시정지·한 프레임씩 넘기기, 피격 캡슐 표시.
  * 재생은 60fps 고정 스텝 (격투게임과 같은 시간 단위).
+ * 반복 클립에 rootMotion 이 있으면 반복마다 캐릭터를 앞으로 옮기고 4번마다 제자리로 돌린다.
+ * 반복하지 않는 클립은 끝에서 HOLD 프레임 멈췄다가 처음부터 다시 재생한다 (미리보기용).
  */
+const MAX_LOOPS = 4;
+const HOLD = 40;
 export interface Animated {
   apply(c: PoseChannels): void;
   hurtboxes: Hurtbox[];
@@ -15,6 +19,9 @@ export class Timeline {
   frame = 0;
   playing = true;
   private acc = 0;
+  private loops = 0;
+  private held = 0;
+  private readonly basePosition: Vector3;
   private readonly boxes = new Group();
   private readonly bar: HTMLDivElement;
   private readonly label: HTMLSpanElement;
@@ -27,7 +34,9 @@ export class Timeline {
     private clip: PoseClip,
     private readonly defaults: PoseChannels,
     scene: Scene,
+    private readonly mover: Object3D,
   ) {
+    this.basePosition = mover.position.clone();
     this.boxes.name = 'debug-boxes';
     this.boxes.visible = false;
     const hurt = new MeshBasicMaterial({ color: 0x3fa9ff, transparent: true, opacity: 0.28, depthWrite: false, });
@@ -77,6 +86,8 @@ export class Timeline {
   setClip(name: string): void {
     this.clip = this.clips[name];
     this.frame = 0;
+    this.loops = 0;
+    this.held = 0;
     this.slider.max = String(this.clip.length - 1);
     this.apply();
   }
@@ -102,14 +113,27 @@ export class Timeline {
     let advanced = false;
     while (this.acc >= 1 / FPS) {
       this.acc -= 1 / FPS;
-      this.frame++;
-      if (this.frame >= this.clip.length) this.frame = this.clip.loop ? 0 : this.clip.length - 1;
       advanced = true;
+      if (this.clip.loop) {
+        this.frame++;
+        if (this.frame >= this.clip.length) {
+          this.frame = 0;
+          this.loops = (this.loops + 1) % MAX_LOOPS;
+        }
+      } else if (this.frame < this.clip.length - 1) {
+        this.frame++;
+      } else if (++this.held >= HOLD) {
+        this.held = 0;
+        this.frame = 0;
+      }
     }
     if (advanced) this.apply();
   }
 
   apply(): void {
+    this.mover.position.copy(this.basePosition);
+    this.mover.position.z += this.loops * (this.clip.rootMotion ?? 0);
+    this.mover.updateMatrixWorld(true);
     this.target.apply(samplePose(this.clip, this.frame, this.defaults));
     this.slider.value = String(this.frame);
     this.label.textContent = `${this.clip.name}  ${this.frame} / ${this.clip.length}f`;
