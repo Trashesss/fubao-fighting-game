@@ -1,0 +1,12 @@
+Character turnaround concept sheet for a realistic fighting-game creature: an upright standing shark.
+Three views side by side on one plain light-gray studio background, same scale, same ground line, orthographic camera: FRONT view (left), SIDE profile view facing right (center), BACK view (right).
+
+Anatomy (important):
+- A real requiem shark body (bronze-gray back, white belly, pale lateral band along the flank, five gill slits, pointed snout, round dark eye, underslung mouth with rows of serrated teeth) standing vertically, head at the top, snout pointing forward.
+- NO arms, NO legs, NO hands, NO feet, NO human limbs at all.
+- The two long pectoral fins act as arms: held forward and slightly raised in a boxer-like guard.
+- The lower body curves forward like a dolphin tail-walking; the tail fin (caudal fin) rests on the ground as the base of support. The two pelvic fins are slightly enlarged and touch the ground like small feet.
+- Tall first dorsal fin on the back, small second dorsal fin, anal fin.
+- Muscular, heavy, intimidating but grounded proportions, about 2.1 m tall.
+
+Style: photorealistic creature design, realistic shark skin with subtle dermal denticle texture and slightly wet sheen, neutral soft studio lighting, no underwater haze, no clothing, no accessories, no text, no labels, no logos.

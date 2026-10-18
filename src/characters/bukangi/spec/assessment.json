@@ -1,0 +1,451 @@
+{
+ "targetName": "Bukangi",
+ "sourceImage": "assets/concept/bukangi/reference-shark-photo.png",
+ "preSpecAssessment": {
+  "objectClass": {
+   "primaryType": "흉상어(Carcharhinus, 구리상어/흑기흉상어 계열) — 격투게임 캐릭터의 기본 몸",
+   "primaryDomain": "hybrid",
+   "formLanguage": [
+    "방추형 유선형 몸",
+    "위아래로 납작한 쐐기형 머리",
+    "위 엽이 큰 비대칭 꼬리(heterocercal)",
+    "낫 모양 가슴지느러미"
+   ],
+   "structureKind": [
+    "연속 유기 곡면(몸통+꼬리 위 엽)",
+    "익형 단면 지느러미 8개",
+    "눈알 2개"
+   ],
+   "motionPotential": [
+    "척추 굽힘(서 있는 자세로 변형)",
+    "지느러미 뿌리 회전",
+    "턱 열기"
+   ],
+   "materialFamilies": [
+    "젖은 상어 피부(방패비늘)",
+    "각막"
+   ],
+   "notes": "헤엄치는 자세로 먼저 사진과 맞춘 뒤 뼈로 서 있는 자세를 만든다(전달 메모 A). 측면 윤곽·지느러미 외곽·표식은 사진에서 측정(reference-measurements.json), 폭은 흉상어 일반 해부 비례."
+  },
+  "complexity": {
+   "tier": "complex",
+   "scores": {
+    "silhouetteComplexity": 0.7,
+    "componentCount": 0.55,
+    "hierarchyDepth": 0.4,
+    "repetitionDensity": 0.35,
+    "materialLayerCount": 0.6,
+    "localDetailDensity": 0.75,
+    "occlusionRisk": 0.5,
+    "actionReadinessNeed": 0.9
+   },
+   "estimatedCounts": {
+    "macroComponents": 3,
+    "mesoComponents": 9,
+    "microFeatureGroups": 8,
+    "materialLayers": 4,
+    "repetitionSystems": 2
+   },
+   "reasoning": [
+    "몸은 하나의 연속 곡면이지만 머리·몸통·꼬리 위 엽의 단면이 크게 달라 단면 지수를 위치별로 바꿔야 한다",
+    "상어로 읽히게 하는 건 작은 디테일(아가미구멍 5개, 입선, 눈꺼풀, 콧구멍)이라 디테일 밀도가 높다",
+    "격투게임용이라 서 있는 자세로 크게 변형되므로 동작 준비도가 가장 중요하다"
+   ]
+  },
+  "specDepthDecision": {
+   "requiredDepth": "complex",
+   "minimumComponentLevels": [
+    "macro",
+    "meso",
+    "micro"
+   ],
+   "needsRepetitionSystems": true,
+   "needsMaterialLocalOverrides": true,
+   "needsMultipleReviewViews": true,
+   "needsActionReadyHierarchy": true,
+   "rationale": "Choose simple/moderate/complex/ultra-complex from observed structure, not from a hardcoded domain."
+  },
+  "unknownsToResolveBeforeImplementation": [],
+  "detailInventory": {
+   "scanMethod": "component-zones",
+   "targetMinDetails": 10,
+   "note": "Enumerate every identity-defining small detail before authoring the spec. Each detail must map to a component.localFeatures entry or material.localOverrides entry, never prose only. Use forge/stage1_intake/build_detail_inventory.py to scan zones.",
+   "details": []
+  },
+  "anatomy": {
+   "applies": false,
+   "styleHeads": 0.0,
+   "proportions": {
+    "headUnit": 0.0,
+    "torso": 0.0,
+    "legs": 0.0,
+    "shoulderWidth": 0.0,
+    "hipWidth": 0.0
+   },
+   "pose": {
+    "type": "unassessed",
+    "jointAngles": {}
+   },
+   "faceLandmarks": {
+    "eyeLine": 0.0,
+    "eyeSpacing": 0.0,
+    "noseBase": 0.0,
+    "mouthLine": 0.0,
+    "hairline": 0.0
+   },
+   "features": [],
+   "confidence": 0.0,
+   "note": "Only meaningful when objectClass.primaryDomain is character or hybrid. Set applies=true and fill from forge/stage1_intake/extract_landmarks.py. See grimoire/character/reconstruction.md and grimoire/character/likeness_maximization.md."
+  },
+  "sourceImage": "/var/folders/9j/z_m65ylj1ql7w0yn7bxwq4wm0000gn/T/orca-paste-1792326704955-1e3d53d1-86ae-4e8f-a783-a2a10b02cc00.png"
+ },
+ "qualityContract": {
+  "qualityBar": "complex",
+  "definitionOfDone": [
+   "곡률 검사 통과: 몸 윗선·아랫선(설계 곡선과 메시 정중선) 부호 바뀜 ≤ 2, 지느러미 앞전 ≤ 1 (뷰어 ?check=1)",
+   "직교 측면 실루엣 겹침 ≥ 0.9 (사진은 정측면이 아니므로 0.95 를 쫓지 않는다)",
+   "얼룩말 반사(?mode=zebra)에서 줄이 꺾이거나 흔들리는 곳이 없다",
+   "서 있는 자세는 이 몸을 뼈로 구부려 만든다 (형상을 다시 짜지 않는다)"
+  ],
+  "minimumSpecDepth": {
+   "macroComponents": 3,
+   "mesoComponents": 8,
+   "microFeatureGroups": 5,
+   "materialLayers": 3,
+   "repetitionSystems": 1,
+   "reviewViewpoints": 4
+  },
+  "featureGroups": [
+   {
+    "id": "overall-silhouette",
+    "name": "Overall silhouette and proportions",
+    "required": true,
+    "qualityCriteria": [
+     "Bounding shape, dominant curves, negative spaces, and scale relationships are explicitly described."
+    ],
+    "evidenceRefs": [
+     "full-object"
+    ],
+    "failureModes": [
+     "model reads as a generic placeholder instead of the reference object",
+     "major proportions are guessed without evidence"
+    ]
+   },
+   {
+    "id": "primary-structure",
+    "name": "Primary structure and hierarchy",
+    "required": true,
+    "qualityCriteria": [
+     "Major parts, joints, seams, contact points, and parent-child relationships are named before code generation."
+    ],
+    "evidenceRefs": [
+     "full-object"
+    ],
+    "failureModes": [
+     "large visible parts are merged into one mesh",
+     "component hierarchy is too shallow for the observed complexity"
+    ]
+   },
+   {
+    "id": "attachment-joint-correctness",
+    "name": "Attachment and joint correctness",
+    "required": true,
+    "qualityCriteria": [
+     "Every visible child appendage, branch, limb, handle, connector, tube, cable, horn, wing, leg, or hinged part has an attachment contract with parent socket, localStart/localEnd, contact type, embed/overlap, and gap tolerance."
+    ],
+    "evidenceRefs": [
+     "full-object"
+    ],
+    "failureModes": [
+     "child part root floats away from the parent",
+     "branch/limb/tube is centered in space instead of pivoting from its root",
+     "parent-child transform mixes world and local coordinates"
+    ]
+   },
+   {
+    "id": "surface-material-response",
+    "name": "Surface material response",
+    "required": true,
+    "qualityCriteria": [
+     "Albedo zones, roughness, normal/bump/displacement intent, cavity dirt, edge wear, and local overrides are specified where visible.",
+     "Important materials define independent albedo, roughness, height/normal, and AO responses instead of reusing one texture for unrelated PBR channels.",
+     "Surface response is decomposed into macro, meso, and micro frequency bands with scale and amplitude tied to object scale."
+    ],
+    "evidenceRefs": [
+     "full-object"
+    ],
+    "failureModes": [
+     "surface looks like flat plastic",
+     "local material variation is missing or not tied to image evidence"
+    ]
+   },
+   {
+    "id": "reference-lookdev",
+    "name": "Reference color, material, and lighting response",
+    "required": true,
+    "qualityCriteria": [
+     "Material-pass names the reference-derived albedo palette, roughness variation, tactile normal/bump/displacement response, and local masks.",
+     "When a source image is available, run reference PBR extraction and require confidence >= 0.7 before treating maps as implementation-ready.",
+     "Lighting-pass names key/fill/rim or environment light, exposure, tone mapping, background, and contact shadow behavior.",
+     "Neutral, grazing-angle, and reference-matched renders prove that surface relief survives relighting and is not painted into albedo."
+    ],
+    "evidenceRefs": [
+     "full-object"
+    ],
+    "failureModes": [
+     "model has acceptable shape but reads as flat shaded or plastic",
+     "colors are a generic average instead of reference-observed local color zones",
+     "lighting is evenly ambient and cannot reproduce the source value range"
+    ]
+   }
+  ],
+  "visualDeltaChecks": [
+   "silhouette and negative-space delta",
+   "component hierarchy depth delta",
+   "repetition density and distribution delta",
+   "material albedo/roughness/normal response delta",
+   "local feature placement and scale delta"
+  ],
+  "antiShallowSpecRules": [
+   "Do not proceed to code if qualityContract.qualityBar is unassessed.",
+   "Do not proceed to code if the spec only contains a root component for a moderate or complex object.",
+   "Do not proceed to code if required featureGroups are not represented by componentTree, materials, or repetitionSystems.",
+   "Do not proceed to code if visible local features are described only in prose and not attached to components/materials/evidenceRefs.",
+   "Do not proceed past structural-pass if attached child parts lack attachment.parentSocket, localStart, localEnd, embedDepth/overlap, and gapTolerance.",
+   "Do not pass material look-dev when albedo is reused as roughness, height, normal, or AO.",
+   "Do not pass material look-dev without macro, meso, and micro surface frequency bands for close-up materials.",
+   "Do not pass reference-fidelity material look-dev from a source image without usable referencePbr maps or an explicit documented limitation.",
+   "Do not patch a spec with extracted PBR maps when extraction confidence is below the target threshold unless the user explicitly accepts lower fidelity.",
+   "Do not place adjacent separate-geometry parts below 0.02 world-unit seam overlap (source: grimoire/build/geometry_patterns.md).",
+   "Do not satisfy raised or recessed relief, fasteners, or grip structure with a map alone when the feature affects form; use geometry or displacement (source: grimoire/build/geometry_patterns.md)."
+  ]
+ },
+ "authoringInstruction": "Fill observed object class, complexity reasoning, featureGroups, visualDeltaChecks, and unknowns before generating or implementing ObjectSculptSpec.",
+ "localSpecSearch": {
+  "collection": "core_3d",
+  "query": "Bukangi shark skin dermal denticles countershading creature organic loft skinning",
+  "index": {
+   "status": "hit",
+   "reason": "current",
+   "fingerprint": "6857e5ab528b42ac12f4f411f862610a0bffce8e47aee3610a7603c318072fe8"
+  },
+  "matches": [
+   {
+    "record_id": "core.topology-intent",
+    "file_path": "grimoire/glossary/3d_vocabulary.md",
+    "heading": "Geometry And Topology",
+    "key_path": null,
+    "score": 5.143858634031,
+    "snippets": [
+     "Topology intent classifies a surface as hard-surface blockout, subdivision-ready, low-poly prop, organic deformed mesh, or alpha-card cluster."
+    ],
+    "source_refs": [
+     {
+      "path": "grimoire/glossary/3d_vocabulary.md",
+      "heading": "Geometry And Topology",
+      "key_path": null
+     }
+    ],
+    "evidence_refs": [
+     {
+      "kind": "source",
+      "ref": "grimoire/glossary/3d_vocabulary.md"
+     },
+     {
+      "kind": "notebooklm-research",
+      "ref": "notebooklm:4b03c2f9-8393-411f-b5b4-039ab9532843",
+      "note": "Validated generic schema vocabulary; numeric claims remain backed by local source_refs."
+     }
+    ]
+   },
+   {
+    "record_id": "core.shader-mapping-reconstruction-metadata-schema",
+    "file_path": "docs/raw/img2threejs-skill-dataset.json",
+    "heading": null,
+    "key_path": "categories.rendering_shader_mapping[15]",
+    "score": 3.568924752552,
+    "snippets": [
+     "... kiểm tra pipeline. Recognition cues: Needed whenever an agent must trace a generated Three.js asset back to its source skin/paint_seed/rarity for QA or reproducibility Dấu hiệu nhận diện: Cần khi agent phải truy vết một tài sản Three.js đã ..."
+    ],
+    "source_refs": [
+     {
+      "path": "docs/raw/img2threejs-skill-dataset.json",
+      "heading": null,
+      "key_path": "categories.rendering_shader_mapping[15]"
+     }
+    ],
+    "evidence_refs": [
+     {
+      "kind": "source",
+      "ref": "docs/raw/img2threejs-skill-dataset.json",
+      "note": "img2threejs NotebookLM research distillation"
+     }
+    ]
+   },
+   {
+    "record_id": "core.pbr-subsurface-scattering-sss",
+    "file_path": "docs/raw/img2threejs-skill-dataset.json",
+    "heading": null,
+    "key_path": "categories.material_pbr[5]",
+    "score": 3.295516945502,
+    "snippets": [
+     "Light transport property for opaque dielectrics where light penetrates and scatters internally before exiting (skin, wax, marble, some polymers). Đặc tính truyền ánh sáng của vật liệu điện môi mờ đục, ánh sáng xuyên vào và tán xạ bên trong trước ..."
+    ],
+    "source_refs": [
+     {
+      "path": "docs/raw/img2threejs-skill-dataset.json",
+      "heading": null,
+      "key_path": "categories.material_pbr[5]"
+     }
+    ],
+    "evidence_refs": [
+     {
+      "kind": "source",
+      "ref": "docs/raw/img2threejs-skill-dataset.json",
+      "note": "img2threejs NotebookLM research distillation"
+     }
+    ]
+   }
+  ]
+ },
+ "detailInventory": {
+  "targetMinDetails": 12,
+  "details": [
+   {
+    "id": "gill-slits",
+    "name": "아가미구멍 5개 (덮개 겹침)",
+    "zone": "head-side",
+    "maps": "sharkAnatomy.gillSlits: form(덮개 부풂) + line(틈, 노멀·AO 맵)",
+    "evidence": "사진 x=589~640, 측정값 gillSlits"
+   },
+   {
+    "id": "mouth",
+    "name": "배 쪽 초승달 입선 + 윗입술",
+    "zone": "head-ventral",
+    "maps": "sharkAnatomy.mouth: form(입술) + line(입선)",
+    "evidence": "사진 입꼬리 u=0.147"
+   },
+   {
+    "id": "labial-furrow",
+    "name": "입꼬리 윗입술 주름",
+    "zone": "head-ventral",
+    "maps": "sharkAnatomy.mouth furrow (line)"
+   },
+   {
+    "id": "nostrils",
+    "name": "콧구멍과 앞쪽 피부판",
+    "zone": "snout-ventral",
+    "maps": "sharkAnatomy.nostrils"
+   },
+   {
+    "id": "eye",
+    "name": "눈알(동공·은회색 홍채) + 아몬드형 눈꺼풀",
+    "zone": "head-side",
+    "maps": "createBukangiModel eye mesh + eyeTexture, sharkAnatomy.eyeSocket",
+    "evidence": "사진 눈 (770,388), 반지름 6px"
+   },
+   {
+    "id": "ampullae",
+    "name": "로렌치니 감각공",
+    "zone": "snout",
+    "maps": "sharkAnatomy.pores (line, 3D 격자)"
+   },
+   {
+    "id": "lateral-line",
+    "name": "옆줄",
+    "zone": "flank",
+    "maps": "sharkAnatomy.lateralLine (line)"
+   },
+   {
+    "id": "precaudal-pit",
+    "name": "꼬리 앞 오목(위·아래)",
+    "zone": "caudal-peduncle",
+    "maps": "sharkAnatomy.surfaceDetail precaudal (line)"
+   },
+   {
+    "id": "denticle-grain",
+    "name": "방패비늘 피부결",
+    "zone": "all",
+    "maps": "sharkAnatomy.skinGrain + skinMaps / buildFinGrainMaps"
+   },
+   {
+    "id": "countershading",
+    "name": "등 구릿빛 회색 / 배 흰색, 경계 S≈-0.5",
+    "zone": "all",
+    "maps": "createBukangiModel.bodyColor (꼭짓점 색)"
+   },
+   {
+    "id": "flank-band",
+    "name": "옆구리 밝은 띠",
+    "zone": "flank",
+    "maps": "bodyColor boundary +0.4 (u 0.42~0.65)"
+   },
+   {
+    "id": "fin-roots",
+    "name": "지느러미 뿌리 필렛 + 법선 섞기",
+    "zone": "fin-roots",
+    "maps": "finLoft fillet + rootNormal"
+   },
+   {
+    "id": "heterocercal-tail",
+    "name": "위 엽이 큰 비대칭 꼬리, 끝 엽",
+    "zone": "caudal",
+    "maps": "몸 메시 연장(위 엽) + caudal-fin-lower",
+    "evidence": "사진 위 엽 끝 (23,245)"
+   },
+   {
+    "id": "mottling",
+    "name": "아주 약한 얼룩·반점",
+    "zone": "dorsal",
+    "maps": "skinMaps color (3D 노이즈)"
+   }
+  ]
+ },
+ "reviewLog": [
+  {
+   "pass": "swim-silhouette",
+   "iou": 0.9563,
+   "zones": {
+    "head": 0.939,
+    "trunk": 0.984,
+    "tailBody": 0.893,
+    "caudal": 0.95
+   },
+   "notes": "머리 IoU 손실 대부분은 사진 마스크의 하이라이트 구멍. 실제 차이는 사진 속 입이 살짝 벌어져 아래턱이 내려온 부분"
+  },
+  {
+   "pass": "swim-closeups",
+   "notes": "주둥이 극점 별무늬(UV 수렴) → 피부결 끔 / 아가미·입 계단(메시 해상도 부족) → 노멀·AO 맵으로 이동 / 피부결 붓자국·감각공 빗금(텍셀 비등방) → 3D 노이즈, 감각공 지름 2텍셀 이상 / 등지느러미 뿌리 색 경계 → DORSAL_TOP 에 맞춤 / 각도 분기선 이음매 → 3D 노이즈"
+  },
+  {
+   "pass": "subdivision-rebuild",
+   "iou": 0.9152,
+   "zones": {
+    "head": 0.918,
+    "trunk": 0.945,
+    "tailBody": 0.915,
+    "caudal": 0.814
+   },
+   "curvature": {
+    "designed": {
+     "top": 1,
+     "bottom": 1,
+     "width": 1
+    },
+    "meshMidline": {
+     "top": 2,
+     "bottom": 1
+    },
+    "finLeadingEdges": 0
+   },
+   "notes": "16열 케이지는 지느러미 뿌리 면(22.5°)이 지느러미보다 두꺼워 혹·소매처럼 보임 → 32열. 몸 케이지 한계면 보간은 비균일 링 간격에서 배선 출렁임(부호 4회) → 근사로 전환. 짝지느러미 두께축을 뿌리 면 둘레 방향에서 계산해 비틀림 제거. 경도 줄무늬 환경맵의 극점이 가짜 수렴점을 만들어 반사 방향 성분 줄무늬로 교체"
+  }
+ ],
+ "construction": {
+  "method": "제어 케이지(링 22 × 둘레 32 + 8×8 끝 덮개, 지느러미 8개를 면 밀어내기로) → Catmull-Clark 4단계",
+  "photoUsage": "몸 높이 랜드마크(윗선 12곳·아랫선 11곳 중앙값), 지느러미 시작·끝점, 눈·아가미·입꼬리. 826점 윤곽은 겹침 확인용",
+  "curves": "윗선·아랫선 = 매개변수 3개 방추형 h=tip±A·u^p·(1-u)^q (최소제곱), 폭 = k(u)×반높이, 꼬리 위 엽 = 곧은/살짝 오목한 선",
+  "bodyFit": "몸 케이지는 근사(조절점 그대로) — 비균일 링 간격을 보간하면 출렁임이 생겨서. 지느러미 정점만 한계면 맞춤",
+  "details": "노멀·그늘 맵에는 아가미·입선·입꼬리 주름·콧구멍·눈꺼풀·꼬리 앞 오목만. 노이즈·감각공·옆줄·얼룩 없음"
+ }
+}
