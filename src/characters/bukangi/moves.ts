@@ -65,4 +65,57 @@ const DASH: PoseClip = {
   ],
 };
 
-export const CLIPS: Record<string, PoseClip> = { idle: IDLE, walk: WALK, dash: DASH };
+/** 후진 보폭 (m / 한 번 깡총) */
+const BACK_STEP = 0.16;
+
+/**
+ * 후진(walk-back): 가드를 올린 채 뒤로 콩콩 작게 깡총. 걷기처럼 끌면 앞으로 숙인 채 뒤로 가는 어색한 모양이 돼서,
+ * 뒤로는 두 점이 함께 뜨는 작은 깡총으로 물러난다 (방어적인 걸음, 발이 미끄러지지 않는다).
+ *   0–8f   딛은 채 살짝 움츠림 (이동 채널 고정)
+ *   8–20f  뒤로 젖히며 떠서 한 보폭 물러남 (정점 8 cm)
+ *   20–28f 착지 충격을 몸통으로 받고 가드 유지
+ */
+const WALK_BACK: PoseClip = {
+  name: 'walk-back',
+  length: 28,
+  loop: true,
+  rootMotion: -BACK_STEP,
+  keys: [
+    { f: 0, pose: { support: 1, tilt: 0, hop: 0, slide: 0, trunkPitch: 4, headPitch: -2, pecR_pitch: 8, pecL_pitch: 8, pecR_yaw: -8, pecL_yaw: -8, pecR_elbow: 6, pecL_elbow: 6 } },
+    { f: 6, pose: { trunkPitch: 8, headPitch: -4 } },
+    { f: 9, pose: { support: 0, tilt: -3, hop: 0.03, slide: 0, trunkPitch: 3, headPitch: 0 }, ease: 'out' },
+    { f: 14, pose: { tilt: -4, hop: 0.08, slide: -BACK_STEP * 0.5, trunkPitch: 0, pecR_pitch: 12, pecL_pitch: 12, tailSide: 3, tailTipSide: -4 }, ease: 'in' },
+    { f: 20, pose: { support: 1, tilt: 0, hop: 0, slide: -BACK_STEP, trunkPitch: 9, headPitch: -5, pecR_pitch: 4, pecL_pitch: 4, tailSide: 0, tailTipSide: 0 } },
+    { f: 28, pose: { slide: -BACK_STEP, trunkPitch: 4, headPitch: -2, pecR_pitch: 8, pecL_pitch: 8 } },
+  ],
+};
+
+/**
+ * 점프: 움츠림 → 도약 → 공중에서 꼬리를 앞으로 말아 넣고 지느러미를 펼침 → 착지.
+ * 올라갈 때 'out', 내려올 때 'in' 보간이라 높이가 포물선에 가깝다 (정점에서 느리고 착지 직전에 빠르다).
+ * forward 거리만큼 신발 목표 위치를 옮겨 앞 점프가 된다.
+ */
+function jump(name: string, forward: number): PoseClip {
+  return {
+    name,
+    length: 52,
+    loop: false,
+    keys: [
+      { f: 0, pose: {} },
+      { f: 7, pose: { trunkPitch: 15, headPitch: -8, pecR_pitch: -20, pecL_pitch: -20, pecR_yaw: 15, pecL_yaw: 15 } },
+      { f: 10, pose: { support: 0, tilt: 3, hop: 0.06, slide: forward * 0.06, trunkPitch: 2, headPitch: 2, pecR_pitch: 15, pecL_pitch: 15, pecR_yaw: 0, pecL_yaw: 0 }, ease: 'out' },
+      { f: 26, pose: { tilt: forward > 0 ? 6 : 0, hop: 0.9, slide: forward * 0.5, trunkPitch: -3, headPitch: 3, tailPitch: -16, tailTipPitch: -8, pecR_pitch: 30, pecL_pitch: 30, pecR_yaw: 30, pecL_yaw: 30, pecR_elbow: 10, pecL_elbow: 10, tailSide: 6 }, ease: 'in' },
+      { f: 42, pose: { support: 1, tilt: 0, hop: 0, slide: forward, trunkPitch: 16, headPitch: -8, tailPitch: 0, tailTipPitch: 0, pecR_pitch: -12, pecL_pitch: -12, pecR_yaw: 20, pecL_yaw: 20, pecR_elbow: 0, pecL_elbow: 0, tailSide: -4 } },
+      { f: 52, pose: { slide: forward, trunkPitch: 0, headPitch: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_yaw: 0, pecL_yaw: 0, tailSide: 0 } },
+    ],
+  };
+}
+
+export const CLIPS: Record<string, PoseClip> = {
+  idle: IDLE,
+  walk: WALK,
+  'walk-back': WALK_BACK,
+  dash: DASH,
+  jump: jump('jump', 0),
+  'jump-forward': jump('jump-forward', 0.9),
+};
