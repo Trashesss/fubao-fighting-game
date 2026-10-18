@@ -32,13 +32,15 @@
 1. 뼈 초기화 → 척추 구간 굽힘 적용
 2. `support > 0` 이면 두 점이 함께 닿는 기울기를 풀고, 자유 기울기(`tilt`)와 `support` 비율로 섞는다
 3. 지느러미 겨누기: 기본 자세 대비 **부모 뼈가 돈 만큼 같이 돌린 방향**을 겨눈다 (몸이 기울면 팔도 따라감)
-4. 접지: 가장 낮은 접지점을 `hop` 높이에, 신발을 `slide` 위치에 고정 (`anchor`)
+4. 발 방향 고정: `support > 0` 이면 꼬리를 옆으로 굽혀 틀어진 꼬리 끝→신발 방향만큼 몸 전체를 되돌린다 (발은 그대로, 윗몸이 돈다)
+5. 접지: 가장 낮은 접지점을 `hop` 높이에, 고정점(신발 또는 꼬리 끝)을 기본 자리 + `slide`/`tailSlide` 에 앞뒤·좌우 모두 고정 (`anchor`)
 
 ### 채널 (전부 0 이 기본 서 있는 자세, 각도는 도, 길이는 m)
 
 | 채널 | 뜻 |
 |---|---|
 | `tilt` | 몸 전체 기울기 (+ = 앞으로 숙임). `support=1` 이면 무시됨(두 점 해가 정함) |
+| `turn` | 몸 전체를 세로축으로 돌리기 (도, 고정점을 축으로). −180~180 으로 접고 `(1 − support)` 만큼만 적용 — 두 발로 딛고는 돌 수 없다. 꼬리 쓸기처럼 360 까지 키를 잡아도 된다 |
 | `support` | 1 = 두 점 접지 유지 / 0 = 풀지 않음 (킥·점프처럼 한 점이나 공중일 때) |
 | `hop` | 가장 낮은 접지점 높이 (점프·깡총) |
 | `slide` | 신발을 고정할 앞뒤 위치 (+ = 앞). 걷기·대시의 이동 거리 |
@@ -47,7 +49,7 @@
 | `anchorTail` | 고정점 선택: 0 = 신발, 1 = 꼬리 위 엽 끝 (신발 킥처럼 꼬리로 버틸 때) |
 | `headPitch/Side/Twist` | 머리 구간 (u 0~0.24). Pitch + = 앞으로 숙임, Side + = 오른쪽, Twist = 비틀기 |
 | `trunkPitch/Side/Twist` | 몸통 구간 (u 0.22~0.44) |
-| `tailPitch/Side` | 꼬리 구간 (u 0.55~0.8). Pitch + = 꼬리가 뒤로, Side + = 오른쪽 |
+| `tailPitch/Side` | 꼬리 구간 (u 0.55~0.8). Pitch + = 꼬리가 뒤로, Side + = 오른쪽. 꼬리 끝을 딛고(`anchorTail=1`) Pitch + 를 주면 꼬리지느러미 전체가 꼬리 끝을 축으로 돌아 **신발이 들린다** (신발 킥) |
 | `tailTipPitch/Side` | 꼬리 끝 구간 (u 0.79~1.0) |
 | `pecR/L_yaw, _pitch, _elbow, _elbowYaw` | 가슴지느러미(팔). yaw + = 바깥으로, pitch + = 위로, elbow = 끝마디 추가 각도 |
 | `pelR/L_yaw, _pitch, _knee` | 배지느러미(발) |
@@ -69,7 +71,7 @@ export const IDLE: PoseClip = {
   loop: true,
   keys: [
     { f: 0,  pose: { trunkPitch: 0, pecR_pitch: 0 } },
-    { f: 20, pose: { trunkPitch: 5, pecR_pitch: 11 }, ease: 'smooth' },  // 'smooth'(기본, Catmull-Rom) | 'linear' | 'hold' | 'in' | 'out'
+    { f: 20, pose: { trunkPitch: 5, pecR_pitch: 11 }, ease: 'smooth' },  // 'smooth'(기본, 넘치지 않는 3차) | 'linear' | 'hold' | 'in' | 'out'
     …
   ],
 };
@@ -83,18 +85,26 @@ export const CLIPS = { idle: IDLE, … };  // 여기 넣으면 뷰어 타임라�
 - **제자리로 돌아오지 않는 반복**(걷기)은 `rootMotion`(반복 한 번의 전진 거리)을 적고, 마지막 키를 `f: length` 에 두고 이동 채널을 그만큼 앞선 값으로 적는다.
   다음 반복은 그만큼 옮긴 자리에서 0 으로 시작한다 (뷰어는 4번 반복마다 제자리로 돌린다).
 - 반복하지 않는 클립은 뷰어에서 끝에 40프레임 멈췄다가 다시 재생한다.
-- 공격의 프레임 데이터·판정은 `src/fighting/frameData.ts` 의 `MoveSpec`/`HitboxSpec` 으로 적는다 (아직 사용하는 기술 없음).
-  판정 기준점(소켓): `snout`, `pecR-tip`, `pecL-tip`, `tail-tip`, `shoe` (`animator.sockets`). 피격 캡슐: `head`, `trunk`, `tail`.
+- 공격은 `moves.ts` 의 `MOVES` 에 `{ clip, hitboxes }` 로 적는다 (`src/fighting/frameData.ts`).
+  판정 구는 `{ socket, radius, frames: [시작, 끝], height, damage }` — frames 는 클립 프레임(0 부터, 끝 포함).
+  **발생·지속·회복은 적지 않는다.** `moveFrames()` 가 판정에서 계산한다 (발생 = 첫 판정 프레임 번호, 1 부터 세는 격투게임 표기 "i9").
+  판정 기준점(소켓): `snout`, `pecR-tip`, `pecL-tip`, `tail-tip`(꼬리 위 엽 끝), `shoe`(신발 밑창 가운데) (`animator.sockets`).
+  피격 캡슐: `snout`, `head`, `trunk`, `tail`, `caudal`(꼬리지느러미), `shoe`. 주둥이 캡슐은 앞끝을 반지름만큼 물려 주둥이 끝을 넘지 않는다.
 
 ### 동작 검토 절차
 
-1. 뷰어에서 재생, ◀ ▶ 로 키 근처를 한 프레임씩 본다. **판정** 버튼으로 피격 캡슐을 같이 본다.
+1. 뷰어에서 재생, ◀ ▶ 로 키 근처를 한 프레임씩 본다. **판정** 버튼으로 피격 캡슐(파랑)과 공격 판정(빨강, 지속 프레임에만)을 같이 본다.
+   공격 클립은 타임라인 글자에 `발생 · 지속 · 회복 [지금 구간]` 이 뜬다. 카메라는 몸통을 따라간다 (**따라가기** 버튼, `follow=0`).
 2. `npm run check` 의 `motion.<클립>`:
    - `maxGap`: support=1 프레임에서 두 접지점 높이 차 (< 1 mm)
    - `tailSkate`: 꼬리 끝이 두 프레임 연속 바닥에 닿은 동안 미끄러진 최대 거리 (< 1 mm)
    - `shoeSkate`: 신발의 같은 값. **걷기의 끌기에서만** 0 이 아니어도 된다
    - `minY`: 가장 낮은 접지점 (≥ 0)
-   - 원인을 찾을 때는 `npm run check -- '&trace=<클립>'` → 프레임별 `[f, tailY, shoeY, tailZ, shoeZ, support, anchorTail]`
+   - 미끄러짐은 바닥 위 앞뒤·좌우 거리다
+   - 원인을 찾을 때는 `npm run check -- '&trace=<클립>'` → 프레임별 `[f, tailY, shoeY, tailX, tailZ, shoeX, shoeZ, support, anchorTail]`
+   - 공격은 `attacks.<클립>`: 발생·지속·회복, 지속 프레임 동안 판정 구의 높이 `y: [아래, 위]`, 앞으로 닿는 거리 `reach`
+   - 자세를 설계할 때는 `npm run check -- '&probe=<URL 인코딩한 채널 JSON>'` → 그 자세의 소켓·접지점 좌표 (`probe`).
+     예: `{"support":0,"anchorTail":1,"tailPitch":45}` 로 신발이 얼마나 들리는지 본다
 3. 키 프레임을 `?anim=<이름>&frame=N&shot=1` 로 찍어 시트로 묶어 본다 ([05-quality-gates.md](05-quality-gates.md)).
 4. 굽힘이 큰 동작은 `mode=zebra` 로 굽은 곳의 구김을 본다.
 
@@ -107,3 +117,14 @@ export const CLIPS = { idle: IDLE, … };  // 여기 넣으면 뷰어 타임라�
 | `dash` | 36f, 0.85 m | 움츠림(6f) → 도약(9f) → 정점 0.3 m 에서 지느러미 펼침(17f) → 착지(25f) → 복귀. gap 0.16 mm, 미끄러짐 0 |
 | `walk-back` | 28f 반복, −0.16 m/반복 (≈0.34 m/s) | 가드를 올린 채 뒤로 콩콩 작게 깡총 (정점 8 cm). 끌면 앞으로 숙인 채 뒤로 가서 어색해 깡총으로 구분. 미끄러짐 0 |
 | `jump` / `jump-forward` | 52f, 0 / 0.9 m | 움츠림(7f) → 도약(10f) → 정점 0.9 m 에서 꼬리를 앞으로 말아 넣고 지느러미 펼침(26f) → 착지(42f) → 복귀. 올라갈 때 'out', 내려올 때 'in' 으로 포물선에 가깝게. 미끄러짐 0 |
+
+## 공격 (3단계)
+
+| 기술 | 높이 | 발생·지속·회복 (전체) | 판정 | 내용 |
+|---|---|---|---|---|
+| `fin-jab` 지느러미 잽 (약) | 상단 | 9 · 3 · 15 (26f) | `pecR-tip` r 0.12, 높이 1.45~1.70 m, 신발 앞 0.72 m | 두 발을 딛은 채 몸통을 오른쪽 앞으로 비틀며 오른쪽 가슴지느러미로 찌름. 지느러미가 짧아 거리가 짧다 |
+| `tail-sweep` 꼬리 쓸기 | 하단 | 15 · 5 · 27 (46f) | `tail-tip` r 0.18, 높이 0.02~0.38 m, 신발 앞 1.23 m | 숙이며 꼬리를 먼저 들고 → 30° 감았다가 신발을 축으로 한 바퀴(`turn` 360) 돌며 꼬리 위 엽 끝으로 바닥을 쓺 |
+| `shoe-kick` 신발 킥 (밈) | 중단 | 20 · 5 · 26 (50f) | `shoe` r 0.20, 높이 0.47~1.06 m, 신발 앞 0.81 m | 꼬리로 깡총 0.85 m 들어가 꼬리 끝으로 딛고, `tailPitch` 60 으로 운동화를 차올림. 0.85 m 앞에서 끝난다 |
+
+공격도 미끄러짐 0, 바닥 뚫림 0 이다. 신발 킥의 거리(0.81 m)는 들어가는 걸음 0.85 m 를 포함한 값이다 — 제자리에서 차면 신발이 원래 자리보다 뒤에서 올라간다 (D-14).
+

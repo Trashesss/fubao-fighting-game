@@ -8,18 +8,33 @@ export interface HitboxSpec {
   /** 이 판정이 따라가는 기준점 이름 (캐릭터가 정의하는 소켓) */
   socket: string;
   radius: number;
-  /** 활성 프레임 [시작, 끝] (포함) */
+  /** 활성 프레임 [시작, 끝] (클립 프레임, 0 부터, 끝 포함) */
   frames: [number, number];
   height: AttackHeight;
   damage: number;
 }
 
+/**
+ * 공격 기술 = 동작 클립 + 판정. 발생·지속·회복 프레임은 판정에서 계산한다 (moveFrames) — 숫자를 두 군데 적지 않는다.
+ */
 export interface MoveSpec {
   clip: PoseClip;
-  startup: number;
-  active: number;
-  recovery: number;
   hitboxes: HitboxSpec[];
+}
+
+/**
+ * 발생(startup) = 첫 판정이 나오는 프레임 번호 (1 부터 센다, 격투게임 표기 "i10" 과 같다),
+ * 지속(active) = 판정이 있는 프레임 수, 회복(recovery) = 마지막 판정 뒤 클립 끝까지 프레임 수.
+ */
+export function moveFrames(move: MoveSpec): { startup: number; active: number; recovery: number; total: number } {
+  const start = Math.min(...move.hitboxes.map((h) => h.frames[0]));
+  const end = Math.max(...move.hitboxes.map((h) => h.frames[1]));
+  return { startup: start + 1, active: end - start + 1, recovery: move.clip.length - 1 - end, total: move.clip.length };
+}
+
+/** 이 프레임에 켜져 있는 판정 */
+export function activeHitboxes(move: MoveSpec, frame: number): HitboxSpec[] {
+  return move.hitboxes.filter((h) => frame >= h.frames[0] && frame <= h.frames[1]);
 }
 
 /** 몸에 붙는 피격 캡슐: 두 소켓 사이 선분 + 반지름 */

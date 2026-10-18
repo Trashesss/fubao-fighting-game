@@ -26,7 +26,8 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { bukangiAnimator, createBukangiModel } from '../characters/bukangi/createBukangiModel';
-import { CLIPS } from '../characters/bukangi/moves';
+import { CLIPS, MOVES } from '../characters/bukangi/moves';
+import { activeHitboxes, capsuleSegment, moveFrames } from '../fighting/frameData';
 import { NEUTRAL } from '../characters/bukangi/sharkAnimator';
 import { samplePose } from '../animation/poseClip';
 import { Timeline } from './timeline';
@@ -39,9 +40,12 @@ import { qualityReport } from '../characters/bukangi/qualityReport';
  *   mode=silhouette    흰 배경에 검은 실루엣
  *   mode=zebra         얼룩말 반사 — 흑백 줄무늬 환경을 거울 재질로 비춰 곡면의 출렁임·구김을 찾는다
  *   check=1            곡률 검사 + 동작 접지 검사 결과를 #check 에 JSON 으로 쓴다
+ *     &trace=<클립>    그 클립의 프레임별 접지점 기록을 덧붙인다
+ *     &probe={...}     그 채널 값으로 한 프레임 적용한 소켓·접지점 좌표를 덧붙인다 (동작 설계용)
  *   anim=idle          재생할 동작 (서 있는 자세에서 기본 idle)
  *   frame=N            그 프레임에 멈춘다 (스크린샷용)
- *   boxes=1            피격 캡슐 표시
+ *   boxes=1            판정 표시 (피격 캡슐 + 공격 판정)
+ *   follow=0           카메라가 캐릭터를 따라가지 않음 (기본은 몸통을 따라간다. 높이는 절반만 따라가 점프 높이가 보이게)
  *   light=sea          사실감 판단용 조명 (위에서 내리는 차가운 빛 + 약한 안개)
  *   pose=swim          바인드 포즈 (헤엄치는 자세) — 기본은 서 있는 격투 자세
  *   shoe=0             운동화 빼기 (사진 실루엣 비교용)
@@ -134,8 +138,12 @@ if (params.get('check') === '1') {
   //   minY   = 가장 낮은 접지점 높이 (바닥 아래로 들어가면 음수)
   const motion: Record<string, { maxGap: number; tailSkate: number; shoeSkate: number; minY: number }> = {};
   const ON_GROUND = 0.002;
-  // ?trace=<클립> : 프레임별 [f, tailY, shoeY, tailZ, shoeZ, support, anchorTail]
+  const neutralShoe = animator.contactReport().shoe;
+  // ?trace=<클립> : 프레임별 [f, tailY, shoeY, tailX, tailZ, shoeX, shoeZ, support, anchorTail]
   const traces: Record<string, (string | number)[][]> = {};
+  // 공격 판정: 지속 프레임 동안 판정 구의 높이(바닥~구 아래/위)와 앞으로 뻗은 거리 (기본 자세 신발 기준, 구 앞면까지)
+  const attacks: Record<string, object> = {};
+  const probe: Record<string, number[]> = {};
   if (standing) {
     for (const clip of Object.values(CLIPS)) {
       let maxGap = 0;
@@ -144,6 +152,8 @@ if (params.get('check') === '1') {
       let minY = Infinity;
       let prev: ReturnType<typeof animator.contactReport> | null = null;
       const trace: (string | number)[][] = [];
+      const move = MOVES[clip.name];
+      const hit = { yLow: Infinity, yHigh: -Infinity, reach: -Infinity };
       const frames = clip.loop ? clip.length + 1 : clip.length;
       for (let f = 0; f < frames; f++) {
         const wrapped = clip.loop && f === clip.length;
@@ -152,25 +162,41 @@ if (params.get('check') === '1') {
         const c = animator.contactReport();
         // 반복이 넘어가는 프레임은 rootMotion 만큼 옮긴 자리에서 다시 시작한다
         if (wrapped) {
-          c.tailZ += clip.rootMotion ?? 0;
-          c.shoeZ += clip.rootMotion ?? 0;
+          c.tail.z += clip.rootMotion ?? 0;
+          c.shoe.z += clip.rootMotion ?? 0;
         }
         if (pose.support >= 0.999) maxGap = Math.max(maxGap, Math.abs(c.tailY - c.shoeY));
         minY = Math.min(minY, c.tailY, c.shoeY);
         if (prev) {
-          if (prev.tailY < ON_GROUND && c.tailY < ON_GROUND) tailSkate = Math.max(tailSkate, Math.abs(c.tailZ - prev.tailZ));
-          if (prev.shoeY < ON_GROUND && c.shoeY < ON_GROUND) shoeSkate = Math.max(shoeSkate, Math.abs(c.shoeZ - prev.shoeZ));
+          if (prev.tailY < ON_GROUND && c.tailY < ON_GROUND) tailSkate = Math.max(tailSkate, c.tail.distanceTo(prev.tail));
+          if (prev.shoeY < ON_GROUND && c.shoeY < ON_GROUND) shoeSkate = Math.max(shoeSkate, c.shoe.distanceTo(prev.shoe));
+        }
+        if (move && !wrapped) {
+          for (const h of activeHitboxes(move, f)) {
+            const p = animator.socketPosition(h.socket);
+            hit.yLow = Math.min(hit.yLow, p.y - h.radius);
+            hit.yHigh = Math.max(hit.yHigh, p.y + h.radius);
+            hit.reach = Math.max(hit.reach, p.z + h.radius - neutralShoe.z);
+          }
         }
         if (params.get('trace') === clip.name)
-          trace.push([f, ...[c.tailY, c.shoeY, c.tailZ, c.shoeZ].map((v) => +v.toFixed(4)), +pose.support.toFixed(2), +pose.anchorTail.toFixed(2)]);
+          trace.push([f, ...[c.tailY, c.shoeY, c.tail.x, c.tail.z, c.shoe.x, c.shoe.z].map((v) => +v.toFixed(4)), +pose.support.toFixed(2), +pose.anchorTail.toFixed(2)]);
         prev = c;
       }
       if (trace.length) traces[clip.name] = trace;
       motion[clip.name] = { maxGap: +maxGap.toFixed(5), tailSkate: +tailSkate.toFixed(5), shoeSkate: +shoeSkate.toFixed(5), minY: +minY.toFixed(5) };
+      if (move) attacks[clip.name] = { ...moveFrames(move), height: move.hitboxes.map((h) => h.height), y: [+hit.yLow.toFixed(3), +hit.yHigh.toFixed(3)], reach: +hit.reach.toFixed(3) };
+    }
+    // ?probe={"tilt":-20,...} : 그 채널로 한 프레임 적용한 뒤 소켓·접지점 위치 (동작 설계용)
+    if (params.has('probe')) {
+      animator.apply({ ...NEUTRAL, ...JSON.parse(params.get('probe')!) });
+      for (const name of animator.sockets.keys()) probe[name] = animator.socketPosition(name).toArray().map((v) => +v.toFixed(3));
+      const c = animator.contactReport();
+      probe.contact = [c.tailY, c.shoeY, c.tail.x, c.tail.z, c.shoe.x, c.shoe.z].map((v) => +v.toFixed(3));
     }
     animator.apply(NEUTRAL);
   }
-  pre.textContent = JSON.stringify({ ...qualityReport(model), cage: model.userData.sculptRuntime.cage, size: s.toArray().map((v) => +v.toFixed(3)), motion, traces });
+  pre.textContent = JSON.stringify({ ...qualityReport(model), cage: model.userData.sculptRuntime.cage, size: s.toArray().map((v) => +v.toFixed(3)), motion, attacks, traces, probe });
   document.body.appendChild(pre);
 }
 
@@ -265,6 +291,26 @@ function setView(name: string) {
 }
 setView(params.get('view') ?? 'three-quarter');
 
+// ── 카메라 따라가기: 몸통 피격 캡슐 가운데가 움직인 만큼 카메라와 회전 중심을 옮긴다 ──────────────
+const trunk = animator.hurtboxes.find((b) => b.name === 'trunk')!;
+const trunkCenter = () => {
+  const [a, b] = capsuleSegment(trunk);
+  return a.add(b).multiplyScalar(0.5);
+};
+const followBase = trunkCenter();
+const followed = new Vector3();
+let follow = standing && params.get('follow') !== '0';
+const updateFollow = () => {
+  const goal = follow ? trunkCenter().sub(followBase) : new Vector3();
+  goal.y *= 0.5;
+  // 재생 중에는 부드럽게 따라간다 (꼬리 쓸기처럼 제자리에서 돌 때 몸통 가운데가 작은 원을 그려 화면이 떨리지 않게).
+  // 멈춰 있으면(한 프레임 보기·스크린샷) 바로 붙는다
+  const d = goal.sub(followed).multiplyScalar(timeline?.playing ? 0.15 : 1);
+  followed.add(d);
+  camera.position.add(d);
+  controls.target.add(d);
+};
+
 // ── 분해 보기 ─────────────────────────────────────────────────────────────
 const parts = model.children.filter((c) => c.name);
 const rest = new Map(parts.map((p) => [p, p.position.clone()]));
@@ -319,6 +365,11 @@ button('분해', (b) => {
   setExplode(!exploded);
   b.setAttribute('aria-pressed', String(exploded));
 });
+button('따라가기', (b) => {
+  follow = !follow;
+  b.setAttribute('aria-pressed', String(follow));
+});
+ui.lastElementChild!.setAttribute('aria-pressed', String(follow));
 button('와이어프레임', (b) => {
   const on = b.getAttribute('aria-pressed') !== 'true';
   b.setAttribute('aria-pressed', String(on));
@@ -330,13 +381,14 @@ button('와이어프레임', (b) => {
 addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
   setView(params.get('view') ?? 'three-quarter');
+  followed.set(0, 0, 0);
 });
 
 // ── 동작 타임라인 (서 있는 자세만) ───────────────────────────────────────────
 let timeline: Timeline | null = null;
 if (standing && !silhouette) {
   const clip = CLIPS[params.get('anim') ?? 'idle'] ?? CLIPS.idle;
-  timeline = new Timeline(animator, CLIPS, clip, NEUTRAL, scene, model);
+  timeline = new Timeline(animator, CLIPS, clip, NEUTRAL, scene, model, MOVES);
   if (params.has('frame')) {
     timeline.setPlaying(false);
     timeline.frame = Number(params.get('frame'));
@@ -350,6 +402,7 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
   timeline?.update(Math.min(0.1, (now - last) / 1000));
   last = now;
+  updateFollow();
   controls.update();
   renderer.render(scene, camera);
 });

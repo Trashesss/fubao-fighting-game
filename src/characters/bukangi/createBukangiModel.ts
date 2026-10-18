@@ -282,13 +282,19 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     for (let u = a; u <= b; u += 0.01) m = Math.max(m, (bodyTop(u) - bodyBottom(u)) / 2);
     return m * TL;
   };
+  // 캡슐은 양끝이 반지름만큼 둥글게 튀어나오므로, 주둥이 캡슐은 앞끝을 반지름만큼 뒤로 물려 주둥이 끝에 맞춘다
+  const snoutR = halfHeight(0.02, 0.1) * 0.9;
   for (const [name, a, b, r] of [
-    ['head', 0.03, 0.2, halfHeight(0.03, 0.2) * 0.85],
+    ['snout', snoutR / TL, 0.1, snoutR],
+    ['head', 0.1, 0.2, halfHeight(0.1, 0.2) * 0.9],
     ['trunk', 0.2, 0.55, halfHeight(0.2, 0.55) * 0.95],
     ['tail', 0.55, 0.8, halfHeight(0.55, 0.8)],
   ] as const) {
     animator.addHurtbox(name, axisSocket(a), axisSocket(b), r);
   }
+  // 발 쪽: 꼬리지느러미(꼬리 뿌리 → 위 엽 끝)와 운동화 — 하단 공격이 맞는 곳
+  animator.addHurtbox('caudal', axisSocket(0.8), tailTip, 0.09);
+  if (sneaker) animator.addHurtbox('shoe', shoeMarkers[0], shoeMarkers[2], 0.07 * SNEAKER_SCALE);
   animator.sockets.set('snout', socketAt('snout', rig.spine[0], toModel(0, (bodyTop(0) + bodyBottom(0)) / 2, 0)));
   for (const side of ['R', 'L']) {
     const chain = rig.limbs[`pectoral-fin-${side}`];

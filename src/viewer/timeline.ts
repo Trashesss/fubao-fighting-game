@@ -1,9 +1,9 @@
-import { CapsuleGeometry, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3, type Object3D, type Scene } from 'three';
+import { CapsuleGeometry, Group, Mesh, MeshBasicMaterial, Quaternion, SphereGeometry, Vector3, type Object3D, type Scene } from 'three';
 import { FPS, samplePose, type PoseClip, type PoseChannels } from '../animation/poseClip';
-import { capsuleSegment, type Hurtbox } from '../fighting/frameData';
+import { activeHitboxes, capsuleSegment, moveFrames, type Hurtbox, type MoveSpec } from '../fighting/frameData';
 
 /**
- * 뷰어 타임라인: 클립 재생·일시정지·한 프레임씩 넘기기, 피격 캡슐 표시.
+ * 뷰어 타임라인: 클립 재생·일시정지·한 프레임씩 넘기기, 판정 표시 (피격 캡슐 = 파랑, 공격 판정 = 빨강, 지속 프레임에만).
  * 재생은 60fps 고정 스텝 (격투게임과 같은 시간 단위).
  * 반복 클립에 rootMotion 이 있으면 반복마다 캐릭터를 앞으로 옮기고 4번마다 제자리로 돌린다.
  * 반복하지 않는 클립은 끝에서 HOLD 프레임 멈췄다가 처음부터 다시 재생한다 (미리보기용).
@@ -13,6 +13,7 @@ const HOLD = 40;
 export interface Animated {
   apply(c: PoseChannels): void;
   hurtboxes: Hurtbox[];
+  sockets: Map<string, Object3D>;
 }
 
 export class Timeline {
@@ -23,6 +24,8 @@ export class Timeline {
   private held = 0;
   private readonly basePosition: Vector3;
   private readonly boxes = new Group();
+  private readonly hits = new Group();
+  private readonly hitMaterial = new MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.45, depthWrite: false });
   private readonly bar: HTMLDivElement;
   private readonly label: HTMLSpanElement;
   private readonly slider: HTMLInputElement;
@@ -35,6 +38,7 @@ export class Timeline {
     private readonly defaults: PoseChannels,
     scene: Scene,
     private readonly mover: Object3D,
+    private readonly moves: Record<string, MoveSpec> = {},
   ) {
     this.basePosition = mover.position.clone();
     this.boxes.name = 'debug-boxes';
@@ -48,6 +52,8 @@ export class Timeline {
       m.renderOrder = 10;
       this.boxes.add(m);
     }
+    this.hits.name = 'debug-hits';
+    this.boxes.add(this.hits);
     scene.add(this.boxes);
 
     this.bar = document.createElement('div');
@@ -89,6 +95,17 @@ export class Timeline {
     this.loops = 0;
     this.held = 0;
     this.slider.max = String(this.clip.length - 1);
+    // 이 기술의 공격 판정 구 (지속 프레임에만 보인다)
+    for (const m of [...this.hits.children] as Mesh[]) {
+      m.geometry.dispose();
+      this.hits.remove(m);
+    }
+    for (const h of this.moves[name]?.hitboxes ?? []) {
+      const m = new Mesh(new SphereGeometry(h.radius, 20, 12), this.hitMaterial);
+      m.userData.hit = h;
+      m.renderOrder = 11;
+      this.hits.add(m);
+    }
     this.apply();
   }
 
@@ -137,9 +154,23 @@ export class Timeline {
     this.target.apply(samplePose(this.clip, this.frame, this.defaults));
     this.slider.value = String(this.frame);
     this.label.textContent = `${this.clip.name}  ${this.frame} / ${this.clip.length}f`;
+    const move = this.moves[this.clip.name];
+    if (move) {
+      // 프레임 데이터와 지금 구간: 발생(판정 전) / 지속 / 회복
+      const fd = moveFrames(move);
+      const phase = this.frame < fd.startup - 1 ? '발생' : this.frame < fd.startup - 1 + fd.active ? '■ 지속' : '회복';
+      this.label.textContent += `   발생 ${fd.startup} · 지속 ${fd.active} · 회복 ${fd.recovery}   [${phase}]`;
+      const on = activeHitboxes(move, this.frame);
+      for (const m of this.hits.children as Mesh[]) {
+        const h = m.userData.hit as (typeof move.hitboxes)[number];
+        m.visible = on.includes(h);
+        this.target.sockets.get(h.socket)!.getWorldPosition(m.position);
+      }
+    }
     const a = new Vector3();
     const b = new Vector3();
     for (const m of this.boxes.children as Mesh[]) {
+      if (!m.userData.box) continue; // 공격 판정 묶음(hits)은 아래에서
       const [pa, pb] = capsuleSegment(m.userData.box as Hurtbox, a, b);
       m.position.copy(pa).add(pb).multiplyScalar(0.5);
       m.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), pb.clone().sub(pa).normalize()));

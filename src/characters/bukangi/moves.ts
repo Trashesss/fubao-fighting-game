@@ -1,4 +1,5 @@
 import type { PoseClip } from '../../animation/poseClip';
+import type { MoveSpec } from '../../fighting/frameData';
 
 /**
  * 부캉이 동작. 채널 뜻은 sharkAnimator.ts 머리 주석. 프레임은 60fps.
@@ -111,6 +112,84 @@ function jump(name: string, forward: number): PoseClip {
   };
 }
 
+/**
+ * 지느러미 잽(약, 상단): 오른쪽 가슴지느러미로 빠르게 찌른다. 두 점 접지는 그대로(support=1) — 발이 움직이지 않는 가장 빠른 기술.
+ *   0–3f  지느러미를 살짝 뒤로 당김 (예비 동작)
+ *   3–8f  몸통을 오른쪽 앞으로 비틀며 지느러미 끝을 정면으로 뻗음
+ *   8–10f 판정 (뻗은 채 유지)
+ *   10–25f 거둬들이고 가드로 복귀
+ * 지느러미가 짧아 끝이 신발 앞 약 0.6 m 까지만 나간다 (몸통을 숙여도 지느러미 뿌리가 내려갈 뿐 더 나가지 않는다).
+ */
+const FIN_JAB: PoseClip = {
+  name: 'fin-jab',
+  length: 26,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 3, pose: { pecR_yaw: 10, pecR_pitch: -10, pecR_elbow: 8, trunkTwist: 6, pecL_yaw: 4, pecL_pitch: 4 } },
+    { f: 8, pose: { pecR_yaw: -30, pecR_pitch: 6, pecR_elbow: -12, trunkTwist: -18, trunkPitch: 12, headPitch: -6, pecL_yaw: 10, pecL_pitch: 8 }, ease: 'out' },
+    { f: 10, pose: { pecR_yaw: -31, pecR_pitch: 5, trunkTwist: -19 } },
+    { f: 25, pose: { pecR_yaw: 0, pecR_pitch: 0, pecR_elbow: 0, trunkTwist: 0, trunkPitch: 0, headPitch: 0, pecL_yaw: 0, pecL_pitch: 0 } },
+  ],
+};
+
+/**
+ * 꼬리 쓸기(하단): 몸을 숙이고 신발을 축으로 한 바퀴 돌며 꼬리 위 엽 끝으로 바닥을 쓴다.
+ * 꼬리 끝은 서 있을 때 몸 뒤에 있어서, 정면을 쓸려면 몸이 반 바퀴 이상 돌아야 한다.
+ * 신발 가운데가 고정점이라 신발은 제자리에서 돌고(미끄러짐 0), 앞으로 숙인 만큼 꼬리 끝이 바닥 위 약 20 cm 로 뜬다.
+ *   0–3f   숙이며 꼬리를 먼저 든다 (support 를 풀어 몸이 돌 수 있게. 꼬리가 바닥에 있을 때 돌면 미끄러진다)
+ *   3–8f   반대쪽으로 30° 감음
+ *   8–13f  돌기 시작 (가속)
+ *   13–19f 빠르게 돎 — 꼬리 끝이 정면을 지나는 14–18f 가 판정
+ *   19–24f 한 바퀴를 채우며 감속
+ *   24–45f 꼬리를 딛고 일어서 복귀
+ */
+const TAIL_SWEEP: PoseClip = {
+  name: 'tail-sweep',
+  length: 46,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 3, pose: { support: 0.4, tilt: 3, turn: 0, trunkPitch: 7, headPitch: -3 } },
+    { f: 8, pose: { support: 0, tilt: 6, turn: -30, trunkPitch: 16, headPitch: -8, pecR_yaw: 20, pecL_yaw: 20, pecR_pitch: -12, pecL_pitch: -12 }, ease: 'in' },
+    { f: 13, pose: { tilt: 9, turn: 70, pecR_yaw: 30, pecL_yaw: 30, pecR_pitch: 10, pecL_pitch: 10 }, ease: 'linear' },
+    { f: 19, pose: { tilt: 9, turn: 290 }, ease: 'out' },
+    { f: 24, pose: { tilt: 5, turn: 360, trunkPitch: 12 } },
+    { f: 34, pose: { support: 1, tilt: 0, turn: 360, trunkPitch: 6, headPitch: -3, pecR_yaw: 6, pecL_yaw: 6, pecR_pitch: -4, pecL_pitch: -4 } },
+    { f: 45, pose: { trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0 } },
+  ],
+};
+
+/** 신발 킥에서 꼬리로 디디며 들어가는 거리 (m) */
+const KICK_STEP = 0.85;
+
+/**
+ * 신발 킥(중단): 꼬리로 깡총 한 걸음 들어가 꼬리 위 엽 끝으로 딛고, 운동화 신은 아래 엽을 앞으로 차올린다.
+ * 꼬리 끝과 신발 거리가 고정(약 1.07 m)이라 제자리에서 차면 신발이 원래 자리보다 뒤에서 올라간다 → 들어가며 찬다.
+ * 꼬리 구간을 뒤로 굽히면(tailPitch +) 꼬리 끝을 축으로 꼬리지느러미 전체가 돌아 신발이 들린다.
+ *   0–6f   움츠림
+ *   6–16f  깡총 앞으로 (고정점을 꼬리 끝으로 바꾼다, anchorTail=1)
+ *   16–20f 꼬리 끝으로 딛고 차올림 — 19–23f 판정
+ *   23–38f 신발을 내려 두 점으로 다시 딛음
+ *   38–49f 복귀 (KICK_STEP 만큼 앞에서 끝난다)
+ */
+const SHOE_KICK: PoseClip = {
+  name: 'shoe-kick',
+  length: 50,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 6, pose: { trunkPitch: 10, headPitch: -5, pecR_pitch: -10, pecL_pitch: -10 } },
+    { f: 10, pose: { support: 0, anchorTail: 1, hop: 0.08, tailSlide: KICK_STEP * 0.35, slide: KICK_STEP * 0.35, tailPitch: 10, trunkPitch: 2, headPitch: 0 }, ease: 'out' },
+    { f: 16, pose: { hop: 0, tailSlide: KICK_STEP, slide: KICK_STEP, tailPitch: 25, tilt: 3, pecR_yaw: 15, pecL_yaw: 15 }, ease: 'in' },
+    { f: 20, pose: { tailPitch: 58, tilt: 6, trunkPitch: -8, headPitch: 4, pecR_yaw: 28, pecL_yaw: 28, pecR_pitch: 20, pecL_pitch: 20 }, ease: 'out' },
+    { f: 23, pose: { tailPitch: 60 } },
+    { f: 32, pose: { tailPitch: 15, tilt: 2, trunkPitch: 4, pecR_yaw: 10, pecL_yaw: 10, pecR_pitch: 0, pecL_pitch: 0 } },
+    { f: 38, pose: { support: 1, tailPitch: 0, tilt: 0, trunkPitch: 10, headPitch: -5, pecR_pitch: -8, pecL_pitch: -8 } },
+    { f: 49, pose: { trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0 } },
+  ],
+};
+
 export const CLIPS: Record<string, PoseClip> = {
   idle: IDLE,
   walk: WALK,
@@ -118,4 +197,14 @@ export const CLIPS: Record<string, PoseClip> = {
   dash: DASH,
   jump: jump('jump', 0),
   'jump-forward': jump('jump-forward', 0.9),
+  'fin-jab': FIN_JAB,
+  'tail-sweep': TAIL_SWEEP,
+  'shoe-kick': SHOE_KICK,
+};
+
+/** 공격 판정. 발생·지속·회복은 moveFrames 로 계산된다. 판정 높이 기준은 docs/04-rig-animation.md */
+export const MOVES: Record<string, MoveSpec> = {
+  'fin-jab': { clip: FIN_JAB, hitboxes: [{ socket: 'pecR-tip', radius: 0.12, frames: [8, 10], height: 'high', damage: 8 }] },
+  'tail-sweep': { clip: TAIL_SWEEP, hitboxes: [{ socket: 'tail-tip', radius: 0.18, frames: [14, 18], height: 'low', damage: 14 }] },
+  'shoe-kick': { clip: SHOE_KICK, hitboxes: [{ socket: 'shoe', radius: 0.2, frames: [19, 23], height: 'mid', damage: 18 }] },
 };
