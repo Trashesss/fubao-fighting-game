@@ -399,5 +399,4 @@ export function buildSharkCage(): SharkCage {
   return { mesh, targets: Float64Array.from(targets), finCenters, finLeadingEdges, finRows };
 }
 
-export const FIN_NAMES = FINS.map((f) => f.name);
 export { LANDMARKS };
