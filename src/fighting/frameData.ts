@@ -12,6 +12,42 @@ export interface HitboxSpec {
   frames: [number, number];
   height: AttackHeight;
   damage: number;
+  /** 맞은 쪽 경직 (프레임, 맞은 다음 프레임부터). 다운시키는 판정은 무시된다 */
+  hitstun: number;
+  /** 막은 쪽 경직 (프레임) */
+  blockstun: number;
+  /** 맞으면 다운 (knockdown → down → wake-up) */
+  knockdown?: boolean;
+}
+
+/** 가드 자세: 서서 막기 / 앉아 막기 */
+export type Guard = 'high' | 'low';
+
+/**
+ * 가드 규칙 (3단 높이, 철권식):
+ *   서서 막기 = 상단·중단을 막는다, 하단에 맞는다
+ *   앉아 막기 = 하단을 막는다, 중단에 맞는다. 상단은 앉은 몸 위로 지나가면 헛치고(판정 위치로 정해짐), 닿으면 막는다
+ */
+export function blocks(guard: Guard, height: AttackHeight): boolean {
+  return guard === 'high' ? height !== 'low' : height !== 'mid';
+}
+
+/** 피격·가드 반응 동작 이름 (캐릭터마다 클립 이름을 맞춘다) */
+export interface ReactionClips {
+  hitHigh: string;
+  hitLow: string;
+  guardHigh: string;
+  guardLow: string;
+  knockdown: string;
+  down: string;
+  wakeUp: string;
+}
+
+/** 이 판정을 받은 쪽이 재생할 반응. guard = null 이면 가드하지 않음. 상단·중단 피격은 hitHigh, 하단 피격은 hitLow */
+export function reactionFor(hit: HitboxSpec, guard: Guard | null, clips: ReactionClips): { clip: string; stun: number; blocked: boolean } {
+  if (guard && blocks(guard, hit.height)) return { clip: guard === 'high' ? clips.guardHigh : clips.guardLow, stun: hit.blockstun, blocked: true };
+  if (hit.knockdown) return { clip: clips.knockdown, stun: 0, blocked: false };
+  return { clip: hit.height === 'low' ? clips.hitLow : clips.hitHigh, stun: hit.hitstun, blocked: false };
 }
 
 /**
@@ -33,6 +69,25 @@ export function moveFrames(move: MoveSpec): { startup: number; active: number; r
   let active = 0;
   for (let f = start; f <= end; f++) if (activeHitboxes(move, f).length) active++;
   return { startup: start + 1, active, recovery: move.clip.length - 1 - end, total: move.clip.length, hits: move.hitboxes.length };
+}
+
+/**
+ * 이득 프레임: 판정이 첫 지속 프레임에 닿았을 때 (상대 경직) − (공격 쪽이 그 뒤 클립 끝까지 남은 프레임).
+ * + 면 공격 쪽이 먼저 움직인다. 여러 번 때리는 기술은 마지막 판정 기준.
+ * onHit 은 다운이면 'KD'. chain = 앞 판정에 맞으면 다음 판정까지 경직이 이어지는지 (연속 히트 보장), 막아도 이어지는지
+ */
+export function frameAdvantage(move: MoveSpec): { onHit: number | 'KD'; onBlock: number; chainOnHit: boolean; chainOnBlock: boolean } {
+  const hits = [...move.hitboxes].sort((a, b) => a.frames[0] - b.frames[0]);
+  const last = hits[hits.length - 1];
+  const remaining = move.clip.length - 1 - last.frames[0];
+  let chainOnHit = true;
+  let chainOnBlock = true;
+  for (let i = 1; i < hits.length; i++) {
+    const gap = hits[i].frames[0] - hits[i - 1].frames[0];
+    if (hits[i - 1].knockdown || hits[i - 1].hitstun < gap) chainOnHit = false;
+    if (hits[i - 1].blockstun < gap) chainOnBlock = false;
+  }
+  return { onHit: last.knockdown ? 'KD' : last.hitstun - remaining, onBlock: last.blockstun - remaining, chainOnHit, chainOnBlock };
 }
 
 /** 이 프레임에 켜져 있는 판정 */

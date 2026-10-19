@@ -1,5 +1,5 @@
 import type { PoseClip } from '../../animation/poseClip';
-import type { MoveSpec } from '../../fighting/frameData';
+import type { MoveSpec, ReactionClips } from '../../fighting/frameData';
 
 /**
  * 부캉이 동작. 채널 뜻은 sharkAnimator.ts 머리 주석. 프레임은 60fps.
@@ -244,6 +244,179 @@ const TWIST_TEAR: PoseClip = {
   ],
 };
 
+/** 맞거나 막아서 뒤로 밀려나는 거리 (m) */
+const HIT_PUSH = 0.14;
+const GUARD_PUSH = 0.07;
+
+/**
+ * 상단 피격(hit-high): 머리·몸통에 맞음 (상단·중단 공통). 발은 딛은 채 윗몸이 뒤로 젖혀지고 바닥을 밀려난다.
+ *   0–3f   맞는 순간: 머리가 뒤로 꺾이고 입이 벌어지며 지느러미가 튄다
+ *   1–10f  두 발이 바닥에 붙은 채 HIT_PUSH 만큼 밀려남 (skid)
+ *   10–27f 몸통을 다시 앞으로 접으며 가드 자세로 복귀
+ * 경직(hitstun)은 기술마다 달라서, 게임은 이 클립을 경직 길이에 맞춰 늘이거나 줄여 재생한다.
+ */
+const HIT_HIGH: PoseClip = {
+  name: 'hit-high',
+  length: 28,
+  loop: false,
+  skid: [1, 10],
+  keys: [
+    { f: 0, pose: { slide: 0 } },
+    { f: 1, pose: { slide: 0 } },
+    { f: 3, pose: { headPitch: -38, trunkPitch: -16, headSide: 8, jaw: 26, pecR_pitch: 30, pecL_pitch: 26, pecR_yaw: 26, pecL_yaw: 30, pecR_elbow: 18, pecL_elbow: 14, tailTipSide: 5 }, ease: 'out' },
+    { f: 10, pose: { slide: -HIT_PUSH, headPitch: -24, trunkPitch: -10, headSide: 4, jaw: 14, pecR_pitch: 16, pecL_pitch: 14, pecR_elbow: 8, pecL_elbow: 6, tailTipSide: -3 } },
+    { f: 18, pose: { slide: -HIT_PUSH, headPitch: 4, trunkPitch: 8, headSide: 0, jaw: 4, pecR_pitch: -4, pecL_pitch: -4, pecR_yaw: 6, pecL_yaw: 6, pecR_elbow: 0, pecL_elbow: 0, tailTipSide: 0 } },
+    { f: 27, pose: { slide: -HIT_PUSH, headPitch: 0, trunkPitch: 0, jaw: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_yaw: 0, pecL_yaw: 0 } },
+  ],
+};
+
+/**
+ * 하단 피격(hit-low): 꼬리·신발을 맞아 발이 걷어차인다. 발이 뒤로 빠지며 깡총 뜨고, 윗몸은 앞으로 고꾸라졌다가 버틴다.
+ *   0–3f   맞는 순간: 몸이 앞으로 숙고(꼬리가 들림) 발이 뜬다
+ *   3–12f  떠서 HIT_PUSH 만큼 밀려남 (공중이라 미끄러짐 없음), 윗몸은 앞으로 접힘
+ *   12–16f 신발부터 딛고 꼬리를 내림
+ *   16–29f 몸을 펴며 복귀
+ */
+const HIT_LOW: PoseClip = {
+  name: 'hit-low',
+  length: 30,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 3, pose: { support: 0, tilt: 7, hop: 0.03, slide: -HIT_PUSH * 0.15, trunkPitch: 14, headPitch: 10, jaw: 16, pecR_pitch: -22, pecL_pitch: -18, pecR_yaw: 22, pecL_yaw: 18, tailSide: -6, tailTipSide: 9 }, ease: 'out' },
+    { f: 8, pose: { tilt: 9, hop: 0.07, slide: -HIT_PUSH * 0.7, trunkPitch: 20, headPitch: 14, jaw: 10, pecR_pitch: -28, pecL_pitch: -26, tailSide: 4, tailTipSide: -6 }, ease: 'in' },
+    { f: 12, pose: { tilt: 6, hop: 0, slide: -HIT_PUSH, trunkPitch: 16, headPitch: 8 } },
+    { f: 16, pose: { support: 1, tilt: 0, slide: -HIT_PUSH, trunkPitch: 12, headPitch: 4, jaw: 4, pecR_pitch: -10, pecL_pitch: -10, tailSide: 0, tailTipSide: 0 } },
+    { f: 29, pose: { slide: -HIT_PUSH, trunkPitch: 0, headPitch: 0, jaw: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_yaw: 0, pecL_yaw: 0 } },
+  ],
+};
+
+/**
+ * 서서 막기(guard-high): 상단·중단을 막는다. 두 가슴지느러미를 얼굴 앞으로 모아 올리고 몸을 웅크린다.
+ *   0–3f   가드를 올림 (프록시 가드 — 막는 순간 자세)
+ *   4–10f  충격: 지느러미가 살짝 눌리고 GUARD_PUSH 만큼 밀려남 (skid)
+ *   10–15f 가드 유지
+ *   15–22f 내림
+ */
+const GUARD_UP = { pecR_yaw: -30, pecL_yaw: -22, pecR_pitch: 34, pecL_pitch: 30, pecR_elbow: 40, pecL_elbow: 36, pecR_elbowYaw: -14, pecL_elbowYaw: -14, trunkPitch: 10, headPitch: 16, trunkTwist: 14 };
+const GUARD_HIGH: PoseClip = {
+  name: 'guard-high',
+  length: 23,
+  loop: false,
+  skid: [4, 10],
+  keys: [
+    { f: 0, pose: { slide: 0 } },
+    { f: 3, pose: { ...GUARD_UP, slide: 0 } },
+    { f: 4, pose: { slide: 0 } },
+    { f: 6, pose: { pecR_pitch: 27, pecL_pitch: 24, pecR_elbow: 48, pecL_elbow: 44, trunkPitch: 5, headPitch: 10, trunkTwist: 10 }, ease: 'out' },
+    { f: 10, pose: { ...GUARD_UP, slide: -GUARD_PUSH } },
+    { f: 15, pose: { slide: -GUARD_PUSH } },
+    { f: 22, pose: { pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_elbow: 0, pecL_elbow: 0, pecR_elbowYaw: 0, pecL_elbowYaw: 0, trunkPitch: 0, headPitch: 0, trunkTwist: 0 } },
+  ],
+};
+
+/**
+ * 앉아 막기(guard-low): 하단을 막는다. 몸통·머리를 앞으로 깊이 숙여 웅크리고(주둥이 높이 2.56 → 약 2.0 m),
+ * 가슴지느러미를 앞 아래로 내려 꼬리·신발 앞을 가린다.
+ */
+const GUARD_DOWN = { trunkPitch: 38, headPitch: 28, pecR_yaw: -18, pecL_yaw: -18, pecR_pitch: -34, pecL_pitch: -32, pecR_elbow: -10, pecL_elbow: -10, tailSide: 0 };
+const GUARD_LOW: PoseClip = {
+  name: 'guard-low',
+  length: 26,
+  loop: false,
+  skid: [5, 11],
+  keys: [
+    { f: 0, pose: { slide: 0 } },
+    { f: 4, pose: { ...GUARD_DOWN, slide: 0 } },
+    { f: 5, pose: { slide: 0 } },
+    { f: 7, pose: { trunkPitch: 33, headPitch: 22, pecR_pitch: -26, pecL_pitch: -24, pecR_elbow: -2, pecL_elbow: -2 }, ease: 'out' },
+    { f: 11, pose: { ...GUARD_DOWN, slide: -GUARD_PUSH } },
+    { f: 17, pose: { slide: -GUARD_PUSH } },
+    { f: 25, pose: { trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_elbow: 0, pecL_elbow: 0 } },
+  ],
+};
+
+/** 다운에서 뒤로 날아가는 거리 (꼬리 끝 기준, m) */
+const DOWN_PUSH = 0.7;
+
+/**
+ * 누운 자세: 뒤로 넘어가 배를 카메라(−x, 캐릭터 왼쪽) 쪽으로 보이며 왼쪽 옆구리를 대고 눕는다.
+ * 몸이 위아래로 높고 좌우로 좁은 데다 등지느러미가 있어서, 등을 대고 바로 누우면 등지느러미에 얹혀 25 cm 뜬다 → 옆으로 굴러 눕는 것이 안정한 자세다.
+ * 바닥 쪽 왼 가슴·배지느러미는 배 쪽으로 접어 넣고(아니면 지느러미가 몸을 받쳐 든다), 위쪽 오른 지느러미는 힘없이 늘어진다.
+ * tilt −96, lean −80, tailSide −4 에서 몸통 옆구리(u 0.3 근처)와 꼬리 위 엽 끝이 함께 바닥에 닿는다 (probe 로 맞춤).
+ */
+const LIE = {
+  support: 0, anchorTail: 1, tailSlide: -DOWN_PUSH, hop: 0, tilt: -96, lean: -80,
+  headSide: -4, headPitch: 0, trunkPitch: 0, tailSide: -4, tailPitch: 0, tailTipSide: 0,
+  pecL_yaw: -35, pecL_pitch: 10, pecL_elbow: 0, pelL_yaw: -30,
+  pecR_yaw: 14, pecR_pitch: 18, pecR_elbow: -14, jaw: 10,
+};
+
+/**
+ * 다운(knockdown): 큰 공격에 맞아 뒤로 날아가 눕는다. 꼬리 끝을 고정점으로 바꿔(anchorTail) 공중 위치를 정한다.
+ *   0–3f   맞는 순간 윗몸이 젖혀짐 (발은 아직 딛음)
+ *   3–7f   발이 뜸
+ *   7–17f  뒤로 젖혀지며 날아감 (정점 0.4 m), 공중에서 옆으로 구르기 시작
+ *   17–27f 떨어져 누운 자세로 바닥에 닿음
+ *   27–40f 한 번 크게, 한 번 작게 튐 (자세는 그대로라 몸이 바닥에 끌리지 않는다)
+ *   40–55f 지느러미·턱이 늘어지며 멈춤
+ */
+const KNOCKDOWN: PoseClip = {
+  name: 'knockdown',
+  length: 56,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 3, pose: { headPitch: -26, trunkPitch: -12, jaw: 26, pecR_pitch: 34, pecL_pitch: 30, pecR_yaw: 30, pecL_yaw: 34, pecR_elbow: 20, pecL_elbow: 16 } },
+    { f: 7, pose: { support: 0, anchorTail: 1, hop: 0.05, tailSlide: -DOWN_PUSH * 0.12, tilt: -14, headPitch: -20, trunkPitch: -10 }, ease: 'out' },
+    { f: 17, pose: { hop: 0.42, tailSlide: -DOWN_PUSH * 0.6, tilt: -62, lean: -30, headPitch: -8, trunkPitch: -4, tailPitch: -8, jaw: 30, pecR_pitch: 40, pecL_pitch: 20, pecR_yaw: 40, pecL_yaw: 10, tailSide: -8, tailTipSide: 10 }, ease: 'in' },
+    { f: 27, pose: { ...LIE, jaw: 22, pecR_pitch: 30, pecR_yaw: 24 } },
+    { f: 32, pose: { hop: 0.09, headSide: -8, tailSide: -8, tailTipSide: -6, pecR_pitch: 40, jaw: 26 }, ease: 'out' },
+    { f: 37, pose: { hop: 0, headSide: -4, tailSide: -4, tailTipSide: 0, pecR_pitch: 22 }, ease: 'in' },
+    { f: 40, pose: { hop: 0.022, pecR_pitch: 28, jaw: 18 }, ease: 'out' },
+    { f: 43, pose: { hop: 0, pecR_pitch: 20 }, ease: 'in' },
+    { f: 55, pose: { ...LIE } },
+  ],
+};
+
+/**
+ * 누워 있기(down): 다운 뒤 기상 전까지 반복. 몸은 그대로 두고(바닥에 끌리지 않게) 위쪽 지느러미·꼬리 끝·턱만 힘없이 움직인다.
+ */
+const DOWN: PoseClip = {
+  name: 'down',
+  length: 60,
+  loop: true,
+  keys: [
+    { f: 0, pose: { ...LIE } },
+    { f: 30, pose: { pecR_pitch: 24, pecR_elbow: -20, jaw: 14, tailTipSide: 3 } },
+  ],
+};
+
+/**
+ * 기상(wake-up): 꼬리로 바닥을 쳐 몸을 굴려 등을 대고, 꼬리 끝을 축으로 몸을 세워 두 점으로 딛는다.
+ *   0–8f   예비: 꼬리를 감고 지느러미로 바닥을 짚음
+ *   8–16f  꼬리로 바닥을 침 → 살짝 뜨며 등 쪽으로 구름 (뜬 채 구르므로 몸이 바닥에 끌리지 않는다)
+ *   16–30f 꼬리 끝으로 딛고 그 점을 축으로 몸을 세움
+ *   30–36f 신발을 딛음 (support 1), 반동
+ *   36–47f 가드 자세로
+ * 다운에서 밀려난 자리(꼬리 끝 −DOWN_PUSH)에서 일어나므로 신발 목표(slide)도 같은 거리로 둔다.
+ */
+const WAKE_UP: PoseClip = {
+  name: 'wake-up',
+  length: 48,
+  loop: false,
+  keys: [
+    { f: 0, pose: { ...LIE, slide: -DOWN_PUSH } },
+    { f: 8, pose: { tailSide: -14, tailTipSide: -10, pecR_pitch: -10, pecR_yaw: 30, pecR_elbow: 0, jaw: 4 } },
+    { f: 12, pose: { hop: 0.12, tilt: -92, lean: -45, tailSide: 10, tailTipSide: 8, pecR_pitch: -30, pecL_pitch: 20 }, ease: 'out' },
+    { f: 17, pose: { hop: 0, tilt: -80, lean: -10, tailSide: 2, tailTipSide: 0, headSide: 0, pecL_yaw: 10, pelL_yaw: 0 }, ease: 'in' },
+    { f: 28, pose: { tilt: -8, lean: 0, trunkPitch: 14, headPitch: -6, tailSide: 0, pecR_yaw: 24, pecL_yaw: 24, pecR_pitch: 10, pecL_pitch: 10, pecR_elbow: 0, jaw: 0 }, ease: 'out' },
+    { f: 31, pose: { support: 1, anchorTail: 1, tilt: 0, trunkPitch: 12, headPitch: -6 } },
+    { f: 36, pose: { anchorTail: 0, trunkPitch: 6, headPitch: -2 } },
+    { f: 47, pose: { trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0 } },
+  ],
+};
+
 export const CLIPS: Record<string, PoseClip> = {
   idle: IDLE,
   walk: WALK,
@@ -256,19 +429,42 @@ export const CLIPS: Record<string, PoseClip> = {
   'shoe-kick': SHOE_KICK,
   'rising-bite': RISING_BITE,
   'twist-tear': TWIST_TEAR,
+  'hit-high': HIT_HIGH,
+  'hit-low': HIT_LOW,
+  'guard-high': GUARD_HIGH,
+  'guard-low': GUARD_LOW,
+  knockdown: KNOCKDOWN,
+  down: DOWN,
+  'wake-up': WAKE_UP,
 };
 
-/** 공격 판정. 발생·지속·회복은 moveFrames 로 계산된다. 판정 높이 기준은 docs/04-rig-animation.md */
+/**
+ * 공격 판정. 발생·지속·회복은 moveFrames, 이득 프레임은 frameAdvantage 로 계산된다. 판정 높이 기준은 docs/04-rig-animation.md
+ * 경직은 이득 프레임을 보고 정했다 (괄호 = 맞았을 때 / 막았을 때):
+ *   지느러미 잽 (+2 / −1) 빠르고 안전한 견제, 신발 킥 (+3 / −4), 솟구쳐 물기 (+2 / −10, 막히면 반격당함),
+ *   꼬리 쓸기 (다운 / −13, 하단 쓸기는 막히면 크게 불리), 비틀어 물어뜯기 1타 경직이 2타까지 이어지고 2타 다운 (다운 / −12)
+ */
 export const MOVES: Record<string, MoveSpec> = {
-  'fin-jab': { clip: FIN_JAB, hitboxes: [{ socket: 'pecR-tip', radius: 0.12, frames: [8, 10], height: 'high', damage: 8 }] },
-  'tail-sweep': { clip: TAIL_SWEEP, hitboxes: [{ socket: 'tail-tip', radius: 0.18, frames: [14, 18], height: 'low', damage: 14 }] },
-  'shoe-kick': { clip: SHOE_KICK, hitboxes: [{ socket: 'shoe', radius: 0.2, frames: [19, 23], height: 'mid', damage: 18 }] },
-  'rising-bite': { clip: RISING_BITE, hitboxes: [{ socket: 'bite', radius: 0.2, frames: [17, 19], height: 'high', damage: 16 }] },
+  'fin-jab': { clip: FIN_JAB, hitboxes: [{ socket: 'pecR-tip', radius: 0.12, frames: [8, 10], height: 'high', damage: 8, hitstun: 19, blockstun: 16 }] },
+  'tail-sweep': { clip: TAIL_SWEEP, hitboxes: [{ socket: 'tail-tip', radius: 0.18, frames: [14, 18], height: 'low', damage: 14, hitstun: 0, blockstun: 18, knockdown: true }] },
+  'shoe-kick': { clip: SHOE_KICK, hitboxes: [{ socket: 'shoe', radius: 0.2, frames: [19, 23], height: 'mid', damage: 18, hitstun: 33, blockstun: 26 }] },
+  'rising-bite': { clip: RISING_BITE, hitboxes: [{ socket: 'bite', radius: 0.2, frames: [17, 19], height: 'high', damage: 16, hitstun: 32, blockstun: 20 }] },
   'twist-tear': {
     clip: TWIST_TEAR,
     hitboxes: [
-      { socket: 'bite', radius: 0.2, frames: [18, 20], height: 'mid', damage: 10 },
-      { socket: 'bite', radius: 0.22, frames: [27, 33], height: 'mid', damage: 20 },
+      { socket: 'bite', radius: 0.2, frames: [18, 20], height: 'mid', damage: 10, hitstun: 14, blockstun: 12 },
+      { socket: 'bite', radius: 0.22, frames: [27, 33], height: 'mid', damage: 20, hitstun: 0, blockstun: 20, knockdown: true },
     ],
   },
+};
+
+/** 피격·가드 반응 클립 (reactionFor 에 넘긴다) */
+export const REACTIONS: ReactionClips = {
+  hitHigh: 'hit-high',
+  hitLow: 'hit-low',
+  guardHigh: 'guard-high',
+  guardLow: 'guard-low',
+  knockdown: 'knockdown',
+  down: 'down',
+  wakeUp: 'wake-up',
 };

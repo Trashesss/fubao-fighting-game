@@ -9,6 +9,8 @@ import { DEG, aimBone, applySwimPose, bendRegion, type SharkRig } from './sharkR
  * 서 있는 자세 기준 방향: 앞(+z) = 배가 보는 쪽(상대 쪽), 위(+y) = 주둥이 쪽, +x = 오른쪽.
  *   tilt        몸 전체 기울기 (+ = 앞으로 숙임). support=1 이면 두 점 접지 해에 더한다
  *   turn        몸 전체를 세로축으로 돌리기 (+ = 위에서 볼 때 반시계, 왼쪽 몸이 앞으로). 고정점을 축으로 돈다
+ *   lean        몸 전체를 옆으로 넘어뜨리기 (+ = 오른쪽으로). 앞뒤로 놓인 두 접지점을 잇는 선이 축이라 발은 제자리에 남는다.
+ *               90 이면 오른쪽 옆구리를 대고 눕는다. support 와 함께 쓰지 않는다 (support 는 앞뒤 기울기만 푼다)
  *   support     1 = 꼬리 위 엽 끝과 신발이 함께 바닥에 닿도록 기울기를 푼다, 0 = 풀지 않는다
  *   hop         가장 낮은 접지점의 높이 (점프·깡총)
  *   slide       신발을 고정할 앞뒤 위치 (+ = 앞으로). anchor=1 이면 몸이 신발을 따라온다
@@ -21,7 +23,7 @@ import { DEG, aimBone, applySwimPose, bendRegion, type SharkRig } from './sharkR
  *   jaw         입 벌림 (도, + = 벌림). 관절은 두 입 구석을 잇는 선
  */
 export const CHANNELS = [
-  'tilt', 'turn', 'support', 'hop', 'slide', 'tailSlide', 'anchor', 'anchorTail',
+  'tilt', 'turn', 'lean', 'support', 'hop', 'slide', 'tailSlide', 'anchor', 'anchorTail',
   'headPitch', 'headSide', 'headTwist',
   'trunkPitch', 'trunkSide', 'trunkTwist',
   'tailPitch', 'tailSide', 'tailTipPitch', 'tailTipSide',
@@ -60,6 +62,11 @@ export interface SharkContacts {
   tailTip: Object3D;
   /** 신발 밑창 (뒤꿈치·가운데·앞코). 신발이 없으면 아래 엽 끝 하나 */
   shoe: Object3D[];
+  /**
+   * 몸 겉면·지느러미 끝 점들. 서 있을 땐 바닥에서 멀고, 넘어지거나 누우면 이 점들이 바닥에 닿는다.
+   * 접지(가장 낮은 점을 바닥에)에 함께 쓴다 — 몸이 바닥을 뚫지 않는다
+   */
+  body: Object3D[];
 }
 
 export class SharkAnimator {
@@ -132,8 +139,10 @@ export class SharkAnimator {
     const rig = this.rig;
     applySwimPose(rig);
     rig.root.position.copy(this.bindRootPos);
-    // YXZ: 기울기(x)를 먼저, 세로축 돌리기(y)를 나중에 — turn 이 기울기와 관계없이 바닥 위에서 도는 회전이 된다
-    rig.root.rotation.set(tiltDeg * DEG, (c.turn ?? 0) * DEG + extraYaw, 0, 'YXZ');
+    // YZX: 기울기(x)를 먼저, 옆으로 넘어뜨리기(앞 방향 z 축)를 다음, 세로축 돌리기(y)를 마지막에 —
+    // turn 은 기울기·넘어짐과 관계없이 바닥 위에서 도는 회전, lean 은 앞뒤로 놓인 발 선을 축으로 옆으로 눕는 회전이 된다
+    // (z 축 + 회전은 위쪽을 왼쪽(−x)으로 보내므로 부호를 뒤집어 + = 오른쪽)
+    rig.root.rotation.set(tiltDeg * DEG, (c.turn ?? 0) * DEG + extraYaw, -(c.lean ?? 0) * DEG, 'YZX');
     // 앞 사슬: 뼈 로컬 x+ = 배 쪽(앞)으로, y+ = 오른쪽으로, z = 비틀기
     bendRegion(rig, REGIONS.head[0], REGIONS.head[1], c.headPitch, 'x');
     bendRegion(rig, REGIONS.head[0], REGIONS.head[1], c.headSide, 'y');
@@ -227,7 +236,7 @@ export class SharkAnimator {
 
     if (!ground) return;
     // 접지: 가장 낮은 접지점을 hop 높이에, 신발(또는 꼬리 끝)은 기본 자세 자리 + slide 에 고정 (turn 으로 돌아도 그 자리에 남는다)
-    const points = [this.contacts.tailTip, ...this.contacts.shoe].map((o) => this.local(o));
+    const points = [this.contacts.tailTip, ...this.contacts.shoe, ...this.contacts.body].map((o) => this.local(o));
     const lowest = Math.min(...points.map((p) => p.y));
     const shoe = this.local(this.anchorPoint());
     const tail = this.local(this.contacts.tailTip);
@@ -238,14 +247,17 @@ export class SharkAnimator {
     rig.root.updateWorldMatrix(true, true);
   }
 
-  /** 검사용: 접지점의 현재 높이와 바닥 위치 (캐릭터 좌표) */
-  contactReport(): { tailY: number; shoeY: number; tail: Vector3; shoe: Vector3 } {
+  /** 검사용: 접지점의 현재 높이와 바닥 위치 (캐릭터 좌표). bodyY = 가장 낮은 몸 점 높이, body = 몸 점 전부 */
+  contactReport(): { tailY: number; shoeY: number; tail: Vector3; shoe: Vector3; bodyY: number; body: Vector3[] } {
     const tail = this.local(this.contacts.tailTip);
+    const body = this.contacts.body.map((o) => this.local(o));
     return {
       tailY: tail.y,
       shoeY: Math.min(...this.contacts.shoe.map((o) => this.local(o).y)),
       tail: tail.setY(0),
       shoe: this.local(this.anchorPoint()).setY(0),
+      bodyY: Math.min(...body.map((p) => p.y)),
+      body,
     };
   }
 

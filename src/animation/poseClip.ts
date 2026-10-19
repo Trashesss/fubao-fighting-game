@@ -31,6 +31,11 @@ export interface PoseClip {
    * 반복 클립의 마지막 키를 f = length 에 두고 이동 채널을 이 거리만큼 앞선 값으로 적으면, 다음 반복은 0 에서 다시 시작한다.
    */
   rootMotion?: number;
+  /**
+   * 밀려남 구간 [시작, 끝] 프레임: 맞거나 막아서 두 발을 딛은 채 뒤로 밀리는 곳. 이 구간의 미끄러짐은 의도된 것이라 검사에서 세지 않는다
+   * (격투게임의 넉백 — 발이 바닥에 붙은 채 밀려난다)
+   */
+  skid?: [number, number];
 }
 
 export const FPS = 60;

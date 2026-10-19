@@ -27,7 +27,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { bukangiAnimator, createBukangiModel } from '../characters/bukangi/createBukangiModel';
 import { CLIPS, MOVES } from '../characters/bukangi/moves';
-import { activeHitboxes, capsuleSegment, moveFrames } from '../fighting/frameData';
+import { activeHitboxes, capsuleSegment, frameAdvantage, moveFrames } from '../fighting/frameData';
 import { NEUTRAL } from '../characters/bukangi/sharkAnimator';
 import { samplePose } from '../animation/poseClip';
 import { Timeline } from './timeline';
@@ -44,6 +44,7 @@ import { qualityReport } from '../characters/bukangi/qualityReport';
  *     &probe={...}     그 채널 값으로 한 프레임 적용한 소켓·접지점 좌표를 덧붙인다 (동작 설계용)
  *   anim=idle          재생할 동작 (서 있는 자세에서 기본 idle)
  *   frame=N            그 프레임에 멈춘다 (스크린샷용)
+ *   set={...}          그 채널 값의 자세 하나로 멈춘다 (동작 설계용, URL 인코딩한 JSON)
  *   boxes=1            판정 표시 (피격 캡슐 + 공격 판정)
  *   follow=0           카메라가 캐릭터를 따라가지 않음 (기본은 몸통을 따라간다. 높이는 절반만 따라가 점프 높이가 보이게)
  *   light=sea          사실감 판단용 조명 (위에서 내리는 차가운 빛 + 약한 안개)
@@ -137,7 +138,10 @@ if (params.get('check') === '1') {
   //                           꼬리는 항상 0 이어야 하고, 신발은 걷기의 '끌기'에서만 움직인다
   //   gap    = support=1 프레임에서 두 접지점 높이 차
   //   minY   = 가장 낮은 접지점 높이 (바닥 아래로 들어가면 음수)
-  const motion: Record<string, { maxGap: number; tailSkate: number; shoeSkate: number; minY: number }> = {};
+  //   bodyMinY  = 가장 낮은 몸 점(몸 겉면·지느러미 끝) 높이. 서 있는 동작은 바닥에서 멀고, 누우면 0
+  //   bodySkate = 몸 점이 두 프레임 연속 바닥에 닿아 있는 동안 미끄러진 최대 거리 (누운 몸이 바닥에 끌리는지)
+  //   skid      = 클립이 밀려남 구간(skid)으로 적은 프레임에서 신발이 밀려난 거리 — 이 구간은 미끄러짐 검사에서 뺀다
+  const motion: Record<string, { maxGap: number; tailSkate: number; shoeSkate: number; minY: number; bodyMinY: number; bodySkate: number; skid?: number }> = {};
   const ON_GROUND = 0.002;
   const neutralShoe = animator.contactReport().shoe;
   // ?trace=<클립> : 프레임별 [f, tailY, shoeY, tailX, tailZ, shoeX, shoeZ, support, anchorTail]
@@ -151,6 +155,9 @@ if (params.get('check') === '1') {
       let tailSkate = 0;
       let shoeSkate = 0;
       let minY = Infinity;
+      let bodyMinY = Infinity;
+      let bodySkate = 0;
+      let skid = 0;
       let prev: ReturnType<typeof animator.contactReport> | null = null;
       const trace: (string | number)[][] = [];
       const move = MOVES[clip.name];
@@ -168,9 +175,16 @@ if (params.get('check') === '1') {
         }
         if (pose.support >= 0.999) maxGap = Math.max(maxGap, Math.abs(c.tailY - c.shoeY));
         minY = Math.min(minY, c.tailY, c.shoeY);
-        if (prev) {
+        bodyMinY = Math.min(bodyMinY, c.bodyY);
+        const skidding = clip.skid && f > clip.skid[0] && f <= clip.skid[1];
+        if (prev && skidding) skid += c.shoe.z - prev.shoe.z;
+        if (prev && !skidding) {
           if (prev.tailY < ON_GROUND && c.tailY < ON_GROUND) tailSkate = Math.max(tailSkate, c.tail.distanceTo(prev.tail));
           if (prev.shoeY < ON_GROUND && c.shoeY < ON_GROUND) shoeSkate = Math.max(shoeSkate, c.shoe.distanceTo(prev.shoe));
+          c.body.forEach((p, i) => {
+            const q = prev!.body[i];
+            if (p.y < ON_GROUND && q.y < ON_GROUND) bodySkate = Math.max(bodySkate, Math.hypot(p.x - q.x, p.z - q.z));
+          });
         }
         if (move && !wrapped) {
           for (const h of activeHitboxes(move, f)) {
@@ -185,15 +199,29 @@ if (params.get('check') === '1') {
         prev = c;
       }
       if (trace.length) traces[clip.name] = trace;
-      motion[clip.name] = { maxGap: +maxGap.toFixed(5), tailSkate: +tailSkate.toFixed(5), shoeSkate: +shoeSkate.toFixed(5), minY: +minY.toFixed(5) };
-      if (move) attacks[clip.name] = { ...moveFrames(move), height: move.hitboxes.map((h) => h.height), y: [+hit.yLow.toFixed(3), +hit.yHigh.toFixed(3)], reach: +hit.reach.toFixed(3) };
+      motion[clip.name] = {
+        maxGap: +maxGap.toFixed(5),
+        tailSkate: +tailSkate.toFixed(5),
+        shoeSkate: +shoeSkate.toFixed(5),
+        minY: +minY.toFixed(5),
+        bodyMinY: +bodyMinY.toFixed(4),
+        bodySkate: +bodySkate.toFixed(5),
+        ...(clip.skid ? { skid: +skid.toFixed(3) } : {}),
+      };
+      if (move) attacks[clip.name] = { ...moveFrames(move), ...frameAdvantage(move), height: move.hitboxes.map((h) => h.height), y: [+hit.yLow.toFixed(3), +hit.yHigh.toFixed(3)], reach: +hit.reach.toFixed(3) };
     }
     // ?probe={"tilt":-20,...} : 그 채널로 한 프레임 적용한 뒤 소켓·접지점 위치 (동작 설계용)
     if (params.has('probe')) {
       animator.apply({ ...NEUTRAL, ...JSON.parse(params.get('probe')!) });
       for (const name of animator.sockets.keys()) probe[name] = animator.socketPosition(name).toArray().map((v) => +v.toFixed(3));
       const c = animator.contactReport();
-      probe.contact = [c.tailY, c.shoeY, c.tail.x, c.tail.z, c.shoe.x, c.shoe.z].map((v) => +v.toFixed(3));
+      probe.contact = [c.tailY, c.shoeY, c.tail.x, c.tail.z, c.shoe.x, c.shoe.z, c.bodyY].map((v) => +v.toFixed(3));
+      // 바닥에 가장 가까운 소켓 5개 (누운 자세에서 무엇이 몸을 받치는지)
+      const all: [string, Vector3][] = [];
+      model.traverse((o) => {
+        if (o.name.startsWith('socket-')) all.push([o.name.slice(7), model.worldToLocal(o.getWorldPosition(new Vector3()))]);
+      });
+      for (const [name, p] of all.sort((x, y) => x[1].y - y[1].y).slice(0, 5)) probe[`low:${name}`] = p.toArray().map((v) => +v.toFixed(3));
     }
     animator.apply(NEUTRAL);
   }
@@ -394,6 +422,10 @@ if (standing && !silhouette) {
     timeline.setPlaying(false);
     timeline.frame = Number(params.get('frame'));
     timeline.apply();
+  }
+  if (params.has('set')) {
+    timeline.setPlaying(false);
+    animator.apply({ ...NEUTRAL, ...JSON.parse(params.get('set')!) });
   }
   if (params.get('boxes') === '1') timeline.showBoxes(true);
 }

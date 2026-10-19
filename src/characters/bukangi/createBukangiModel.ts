@@ -287,8 +287,26 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     shoeMarkers.push(socketAt('lobe-tip', spineBoneAt(rig, 0.83), lobeTip));
   }
   const tailTip = socketAt('tail-tip', spineBoneAt(rig, CAUDAL.end), upperTip);
+  // 몸 접지점: 몸통 겉면 (u 0.02~0.78 마다 단면 둘레 12곳) + 지느러미 끝. 넘어지거나 누울 때 바닥에 닿는 점들
+  const bodyContacts: Object3D[] = [];
+  for (let u = 0.02; u <= 0.781; u += 0.04) {
+    const sec = sectionAt(u);
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      bodyContacts.push(socketAt(`body-${u.toFixed(2)}-${k}`, spineBoneAt(rig, u), toModel(sec.halfWidth * Math.cos(a), sec.center + sec.halfHeight * Math.sin(a), u)));
+    }
+  }
+  for (const fin of ['dorsal-fin', 'second-dorsal-fin', 'anal-fin']) {
+    const rows = cage.finRows[fin];
+    const tip = new Vector3(...rows[rows.length - 1].center);
+    bodyContacts.push(socketAt(`${fin}-tip`, spineBoneAt(rig, U0 - tip.z / TL), tip));
+  }
+  for (const [name, chain] of Object.entries(rig.limbs)) {
+    const rows = cage.finRows[name];
+    bodyContacts.push(socketAt(`${name}-tip`, chain[2], new Vector3(...rows[rows.length - 1].center)));
+  }
   root.updateMatrixWorld(true);
-  const animator = new SharkAnimator(root, rig, { tailTip, shoe: shoeMarkers }, tilt);
+  const animator = new SharkAnimator(root, rig, { tailTip, shoe: shoeMarkers, body: bodyContacts }, tilt);
 
   // 판정 소켓: 몸 축 위 점들 (피격 캡슐 양끝) + 공격에 쓸 끝점들
   const axisSocket = (u: number) => socketAt(`axis-${u}`, spineBoneAt(rig, u), toModel(0, (bodyTop(u) + bodyBottom(u)) / 2, u));
