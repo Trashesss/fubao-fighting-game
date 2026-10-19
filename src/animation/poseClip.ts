@@ -36,6 +36,26 @@ export interface PoseClip {
    * (격투게임의 넉백 — 발이 바닥에 붙은 채 밀려난다)
    */
   skid?: [number, number];
+  /**
+   * 효과 이벤트: f 프레임에 socket 위치(바닥 위 x·z)에서 type 효과를 낸다. until·every 를 적으면 f 부터 until 까지 every 프레임마다 낸다.
+   * 그리는 쪽(뷰어 타임라인, 게임)이 type 을 해석한다 — 지금은 바닥 물결 'splash' | 'wake' (src/effects/ripples.ts)
+   */
+  events?: ClipEvent[];
+}
+
+export interface ClipEvent {
+  f: number;
+  type: string;
+  socket: string;
+  until?: number;
+  every?: number;
+}
+
+/** 이벤트가 실제로 나는 프레임들 */
+export function eventFrames(e: ClipEvent): number[] {
+  const out: number[] = [];
+  for (let f = e.f; f <= (e.until ?? e.f); f += e.every ?? 1) out.push(f);
+  return out;
 }
 
 export const FPS = 60;

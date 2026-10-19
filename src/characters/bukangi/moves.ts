@@ -417,6 +417,58 @@ const WAKE_UP: PoseClip = {
   ],
 };
 
+/**
+ * 필살기 잠수 강습(dive-assault): 바닥을 물처럼 써서 머리부터 잠수 → 등지느러미만 내놓고 다가감 → 상대 앞에서 수직으로 솟구치며 물기.
+ * 바닥 아래는 뷰어·게임이 그리지 않는다 (바닥 클리핑). sink = 가장 낮은 점 기준 잠긴 깊이.
+ *   0–8f   움츠림
+ *   8–13f  앞으로 작게 뜀
+ *   13–19f 머리부터 바닥에 꽂힘 → 25f 에 꼬리·신발까지 잠김
+ *   25–27f (바닥 아래) 수평으로 돌아눕기 — 'hold' 로 한 번에 바꿔 중간 자세가 바닥 위로 비치지 않게 한다
+ *   27–52f 등지느러미만 바닥 위 약 20 cm 로 내놓고 꼬리를 좌우로 저으며 다가감
+ *   52–57f 지느러미가 잠기고 (바닥 아래) 수직으로 섬 — 이때 신발 목표를 머리가 있던 자리 밑으로 옮긴다
+ *   57–63f 바닥을 뚫고 수직으로 솟구치며 입을 벌림, 63–66f 턱을 닫음 (판정)
+ *   66–80f 떨어져 두 점으로 착지, 95f 까지 복귀
+ * 수평일 때 등지느러미는 신발보다 약 1.46 m 앞, 수직일 때 주둥이는 신발보다 약 0.14 m 앞 (probe) — 솟는 자리가 지느러미가 멈춘 자리와 맞게 slide 를 정했다.
+ */
+/** 잠수 중 신발 목표 위치: 지느러미가 나타날 때 / 멈출 때, 솟구칠 때 */
+const DIVE_FIN_START = 0.33;
+const DIVE_FIN_END = 1.33;
+const DIVE_RISE = 2.25;
+/** 수평으로 헤엄치는 자세. 꼬리를 아래로 굽혀(tailPitch +) 꼬리 위 엽 끝을 몸통 높이 아래로 내린다 — 안 굽히면 꼬리 끝이 등지느러미보다 높이 솟아 두 지느러미가 보인다 */
+const SWIM = { pecR_yaw: 20, pecL_yaw: 20, pecR_pitch: -6, pecL_pitch: -6, pecR_elbow: -6, pecL_elbow: -6, trunkPitch: 0, headPitch: 0, jaw: 0, tailPitch: 25, tailTipPitch: 20 };
+/** 등지느러미 끝이 바닥 위 0.22 m 로 나오는 깊이 (SWIM, tilt 82 에서 지느러미 끝 1.315 m, 등 0.985 m — probe) */
+const FIN_SINK = 1.095;
+const DIVE_ASSAULT: PoseClip = {
+  name: 'dive-assault',
+  length: 96,
+  loop: false,
+  events: [
+    { f: 21, type: 'splash', socket: 'dorsal-tip' },
+    { f: 30, type: 'wake', socket: 'dorsal-tip', until: 54, every: 3 },
+    { f: 60, type: 'splash', socket: 'snout' },
+  ],
+  keys: [
+    { f: 0, pose: {} },
+    { f: 8, pose: { trunkPitch: 14, headPitch: -6, pecR_pitch: -20, pecL_pitch: -20, pecR_yaw: 10, pecL_yaw: 10 } },
+    { f: 13, pose: { support: 0, hop: 0.22, tilt: 35, slide: 0, trunkPitch: 6, headPitch: 10, pecR_pitch: 10, pecL_pitch: 10, pecR_yaw: -10, pecL_yaw: -10 }, ease: 'out' },
+    { f: 19, pose: { hop: 0, tilt: 115, slide: -0.6, sink: 0.5, headPitch: 6, tailSide: 6 }, ease: 'in' },
+    { f: 25, pose: { tilt: 150, slide: 0.25, sink: 2.9, tailSide: -8 }, ease: 'hold' },
+    { f: 27, pose: { ...SWIM, tilt: 82, slide: DIVE_FIN_START, sink: FIN_SINK + 0.4, tailSide: 0, tailTipSide: 0 } },
+    { f: 31, pose: { sink: FIN_SINK, slide: DIVE_FIN_START + 0.1, tailSide: 12, tailTipSide: -8 }, ease: 'out' },
+    { f: 37, pose: { slide: DIVE_FIN_START + 0.36, tailSide: -14, tailTipSide: 10, trunkSide: 3 } },
+    { f: 43, pose: { slide: DIVE_FIN_START + 0.64, tailSide: 14, tailTipSide: -10, trunkSide: -3 } },
+    { f: 49, pose: { slide: DIVE_FIN_END - 0.07, tailSide: -12, tailTipSide: 8, trunkSide: 2 } },
+    { f: 52, pose: { slide: DIVE_FIN_END, sink: FIN_SINK, tailSide: 0, tailTipSide: 0, trunkSide: 0 } },
+    { f: 55, pose: { sink: FIN_SINK + 0.5 }, ease: 'hold' },
+    { f: 57, pose: { tilt: -4, slide: DIVE_RISE, sink: 2.9, tailPitch: 0, tailTipPitch: 0, trunkPitch: -4, headPitch: -12, jaw: 45, pecR_pitch: 30, pecL_pitch: 30, pecR_yaw: 30, pecL_yaw: 30 } },
+    { f: 63, pose: { sink: 0, hop: 0.38, jaw: 58, headPitch: -6 }, ease: 'out' },
+    { f: 66, pose: { hop: 0.46, jaw: 0, headPitch: 22, trunkPitch: 8 }, ease: 'out' },
+    { f: 71, pose: { hop: 0.42, headPitch: 18 }, ease: 'in' },
+    { f: 80, pose: { support: 1, hop: 0, tilt: 0, trunkPitch: 14, headPitch: -6, pecR_pitch: -10, pecL_pitch: -10, pecR_yaw: 20, pecL_yaw: 20 } },
+    { f: 95, pose: { trunkPitch: 0, headPitch: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_elbow: 0, pecL_elbow: 0 } },
+  ],
+};
+
 export const CLIPS: Record<string, PoseClip> = {
   idle: IDLE,
   walk: WALK,
@@ -436,6 +488,7 @@ export const CLIPS: Record<string, PoseClip> = {
   knockdown: KNOCKDOWN,
   down: DOWN,
   'wake-up': WAKE_UP,
+  'dive-assault': DIVE_ASSAULT,
 };
 
 /**
@@ -455,6 +508,12 @@ export const MOVES: Record<string, MoveSpec> = {
       { socket: 'bite', radius: 0.2, frames: [18, 20], height: 'mid', damage: 10, hitstun: 14, blockstun: 12 },
       { socket: 'bite', radius: 0.22, frames: [27, 33], height: 'mid', damage: 20, hitstun: 0, blockstun: 20, knockdown: true },
     ],
+  },
+  // 필살기: 잠긴 동안(17–58f) 무적. 바닥에서 솟구치는 물기라 중단 (앉아 막기로 못 막음), 막히면 크게 불리
+  'dive-assault': {
+    clip: DIVE_ASSAULT,
+    invuln: [17, 58],
+    hitboxes: [{ socket: 'bite', radius: 0.28, frames: [60, 65], height: 'mid', damage: 30, hitstun: 0, blockstun: 22, knockdown: true }],
   },
 };
 

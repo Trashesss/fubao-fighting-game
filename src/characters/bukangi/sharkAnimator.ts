@@ -13,6 +13,7 @@ import { DEG, aimBone, applySwimPose, bendRegion, type SharkRig } from './sharkR
  *               90 이면 오른쪽 옆구리를 대고 눕는다. support 와 함께 쓰지 않는다 (support 는 앞뒤 기울기만 푼다)
  *   support     1 = 꼬리 위 엽 끝과 신발이 함께 바닥에 닿도록 기울기를 푼다, 0 = 풀지 않는다
  *   hop         가장 낮은 접지점의 높이 (점프·깡총)
+ *   sink        바닥 아래로 잠기는 깊이 (m, 잠수). 접지를 푼 뒤 몸 전체를 이만큼 내린다 — 바닥을 물처럼 쓰는 필살기용
  *   slide       신발을 고정할 앞뒤 위치 (+ = 앞으로). anchor=1 이면 몸이 신발을 따라온다
  *   tailSlide   꼬리 위 엽 끝을 고정할 앞뒤 위치 (anchorTail=1 일 때)
  *   anchor      1 = 고정점을 바닥에 고정해 미끄러지지 않게 한다
@@ -23,7 +24,7 @@ import { DEG, aimBone, applySwimPose, bendRegion, type SharkRig } from './sharkR
  *   jaw         입 벌림 (도, + = 벌림). 관절은 두 입 구석을 잇는 선
  */
 export const CHANNELS = [
-  'tilt', 'turn', 'lean', 'support', 'hop', 'slide', 'tailSlide', 'anchor', 'anchorTail',
+  'tilt', 'turn', 'lean', 'support', 'hop', 'sink', 'slide', 'tailSlide', 'anchor', 'anchorTail',
   'headPitch', 'headSide', 'headTwist',
   'trunkPitch', 'trunkSide', 'trunkTwist',
   'tailPitch', 'tailSide', 'tailTipPitch', 'tailTipSide',
@@ -243,7 +244,7 @@ export class SharkAnimator {
     const dShoe = new Vector3(this.neutralAnchor.x - shoe.x, 0, this.neutralAnchor.z + c.slide - shoe.z);
     const dTail = new Vector3(this.neutralTail.x - tail.x, 0, this.neutralTail.z + c.tailSlide - tail.z);
     const d = dShoe.lerp(dTail, c.anchorTail).multiplyScalar(c.anchor);
-    rig.root.position.copy(this.bindRootPos).add(new Vector3(d.x, c.hop - lowest, d.z));
+    rig.root.position.copy(this.bindRootPos).add(new Vector3(d.x, c.hop - lowest - Math.max(0, c.sink ?? 0), d.z));
     rig.root.updateWorldMatrix(true, true);
   }
 

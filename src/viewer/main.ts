@@ -12,6 +12,7 @@ import {
   OrthographicCamera,
   PCFSoftShadowMap,
   PerspectiveCamera,
+  Plane,
   PlaneGeometry,
   PMREMGenerator,
   Raycaster,
@@ -68,6 +69,7 @@ renderer.outputColorSpace = SRGBColorSpace;
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.shadowMap.enabled = !silhouette;
 renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new Scene();
@@ -108,6 +110,7 @@ const mirror = zebra
     })
   : null;
 
+const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
 const model = createBukangiModel({ pose: params.get('pose') === 'swim' ? 'swim' : 'stand', shoe: params.get('shoe') !== '0' });
 model.traverse((o) => {
   if (o instanceof Mesh) {
@@ -115,6 +118,11 @@ model.traverse((o) => {
     o.receiveShadow = true;
     if (silhouette) o.material = new MeshBasicMaterial({ color: 0x000000 });
     if (mirror) o.material = mirror;
+    // 바닥(y=0) 아래는 그리지 않는다 — 잠수(sink) 중 바닥 아래 몸이 비쳐 보이지 않게. 그림자도 함께 자른다
+    for (const m of [o.material].flat()) {
+      m.clippingPlanes = [floorPlane];
+      m.clipShadows = true;
+    }
   }
 });
 const hide = (params.get('hide') ?? '').split(',').filter(Boolean);
@@ -141,7 +149,10 @@ if (params.get('check') === '1') {
   //   bodyMinY  = 가장 낮은 몸 점(몸 겉면·지느러미 끝) 높이. 서 있는 동작은 바닥에서 멀고, 누우면 0
   //   bodySkate = 몸 점이 두 프레임 연속 바닥에 닿아 있는 동안 미끄러진 최대 거리 (누운 몸이 바닥에 끌리는지)
   //   skid      = 클립이 밀려남 구간(skid)으로 적은 프레임에서 신발이 밀려난 거리 — 이 구간은 미끄러짐 검사에서 뺀다
-  const motion: Record<string, { maxGap: number; tailSkate: number; shoeSkate: number; minY: number; bodyMinY: number; bodySkate: number; skid?: number }> = {};
+  //   dive      = 잠수(sink > 0) 프레임 수, 그중 몸이 다 잠긴(주둥이·꼬리 끝·신발이 바닥 아래) 프레임에서
+  //               fin = 등지느러미 끝의 최고 높이, other = 등지느러미 끝 말고 가장 높은 몸 점 (바닥 아래여야 '지느러미만 보임').
+  //               잠수 프레임은 minY·미끄러짐 검사에서 뺀다
+  const motion: Record<string, object> = {};
   const ON_GROUND = 0.002;
   const neutralShoe = animator.contactReport().shoe;
   // ?trace=<클립> : 프레임별 [f, tailY, shoeY, tailX, tailZ, shoeX, shoeZ, support, anchorTail]
@@ -158,6 +169,7 @@ if (params.get('check') === '1') {
       let bodyMinY = Infinity;
       let bodySkate = 0;
       let skid = 0;
+      const dive = { frames: 0, fin: -Infinity, other: -Infinity };
       let prev: ReturnType<typeof animator.contactReport> | null = null;
       const trace: (string | number)[][] = [];
       const move = MOVES[clip.name];
@@ -174,6 +186,28 @@ if (params.get('check') === '1') {
           c.shoe.z += clip.rootMotion ?? 0;
         }
         if (pose.support >= 0.999) maxGap = Math.max(maxGap, Math.abs(c.tailY - c.shoeY));
+        if (move && !wrapped) {
+          for (const h of activeHitboxes(move, f)) {
+            const p = animator.socketPosition(h.socket);
+            // 바닥 아래 부분은 판정이 없는 것과 같다
+            hit.yLow = Math.min(hit.yLow, Math.max(0, p.y - h.radius));
+            hit.yHigh = Math.max(hit.yHigh, p.y + h.radius);
+            hit.reach = Math.max(hit.reach, p.z + h.radius - neutralShoe.z);
+          }
+        }
+        const sunk = (pose.sink ?? 0) > 1e-4;
+        if (sunk) {
+          dive.frames++;
+          if (animator.socketPosition('snout').y < 0 && c.tailY < 0 && c.shoeY < 0) {
+            const finY = animator.socketPosition('dorsal-tip').y;
+            dive.fin = Math.max(dive.fin, finY);
+            const ys = c.body.map((p) => p.y).sort((x, y) => y - x);
+            // 등지느러미 끝 자신은 뺀다 (body 목록에 들어 있다)
+            dive.other = Math.max(dive.other, Math.abs(ys[0] - finY) < 1e-6 ? ys[1] : ys[0]);
+          }
+          prev = null;
+          continue;
+        }
         minY = Math.min(minY, c.tailY, c.shoeY);
         bodyMinY = Math.min(bodyMinY, c.bodyY);
         const skidding = clip.skid && f > clip.skid[0] && f <= clip.skid[1];
@@ -185,14 +219,6 @@ if (params.get('check') === '1') {
             const q = prev!.body[i];
             if (p.y < ON_GROUND && q.y < ON_GROUND) bodySkate = Math.max(bodySkate, Math.hypot(p.x - q.x, p.z - q.z));
           });
-        }
-        if (move && !wrapped) {
-          for (const h of activeHitboxes(move, f)) {
-            const p = animator.socketPosition(h.socket);
-            hit.yLow = Math.min(hit.yLow, p.y - h.radius);
-            hit.yHigh = Math.max(hit.yHigh, p.y + h.radius);
-            hit.reach = Math.max(hit.reach, p.z + h.radius - neutralShoe.z);
-          }
         }
         if (params.get('trace') === clip.name)
           trace.push([f, ...[c.tailY, c.shoeY, c.tail.x, c.tail.z, c.shoe.x, c.shoe.z].map((v) => +v.toFixed(4)), +pose.support.toFixed(2), +pose.anchorTail.toFixed(2)]);
@@ -207,8 +233,9 @@ if (params.get('check') === '1') {
         bodyMinY: +bodyMinY.toFixed(4),
         bodySkate: +bodySkate.toFixed(5),
         ...(clip.skid ? { skid: +skid.toFixed(3) } : {}),
+        ...(dive.frames ? { dive: { frames: dive.frames, fin: +dive.fin.toFixed(3), other: +dive.other.toFixed(3) } } : {}),
       };
-      if (move) attacks[clip.name] = { ...moveFrames(move), ...frameAdvantage(move), height: move.hitboxes.map((h) => h.height), y: [+hit.yLow.toFixed(3), +hit.yHigh.toFixed(3)], reach: +hit.reach.toFixed(3) };
+      if (move) attacks[clip.name] = { ...moveFrames(move), ...frameAdvantage(move), ...(move.invuln ? { invuln: move.invuln } : {}), height: move.hitboxes.map((h) => h.height), y: [+hit.yLow.toFixed(3), +hit.yHigh.toFixed(3)], reach: +hit.reach.toFixed(3) };
     }
     // ?probe={"tilt":-20,...} : 그 채널로 한 프레임 적용한 뒤 소켓·접지점 위치 (동작 설계용)
     if (params.has('probe')) {
@@ -221,7 +248,10 @@ if (params.get('check') === '1') {
       model.traverse((o) => {
         if (o.name.startsWith('socket-')) all.push([o.name.slice(7), model.worldToLocal(o.getWorldPosition(new Vector3()))]);
       });
-      for (const [name, p] of all.sort((x, y) => x[1].y - y[1].y).slice(0, 5)) probe[`low:${name}`] = p.toArray().map((v) => +v.toFixed(3));
+      all.sort((x, y) => x[1].y - y[1].y);
+      for (const [name, p] of all.slice(0, 5)) probe[`low:${name}`] = p.toArray().map((v) => +v.toFixed(3));
+      // 가장 높은 소켓 5개 (잠수 중 바닥 위로 나오는 것 찾기)
+      for (const [name, p] of all.slice(-5)) probe[`high:${name}`] = p.toArray().map((v) => +v.toFixed(3));
     }
     animator.apply(NEUTRAL);
   }

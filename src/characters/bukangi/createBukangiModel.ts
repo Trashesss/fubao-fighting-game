@@ -301,6 +301,7 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     const tip = new Vector3(...rows[rows.length - 1].center);
     bodyContacts.push(socketAt(`${fin}-tip`, spineBoneAt(rig, U0 - tip.z / TL), tip));
   }
+  const dorsalTip = bodyContacts[bodyContacts.length - 3];
   for (const [name, chain] of Object.entries(rig.limbs)) {
     const rows = cage.finRows[name];
     bodyContacts.push(socketAt(`${name}-tip`, chain[2], new Vector3(...rows[rows.length - 1].center)));
@@ -335,6 +336,7 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     animator.sockets.set(`pec${side}-tip`, socketAt(`pec${side}-tip`, chain[2], new Vector3(...rows[rows.length - 1].center)));
   }
   animator.sockets.set('tail-tip', tailTip);
+  animator.sockets.set('dorsal-tip', dorsalTip);
   // 물기 판정 기준: 입 가운데 (입 앞끝과 구석 사이) 배 쪽 피부에서 조금 바깥. 위턱(머리)을 따른다
   const biteU = (MOUTH.front + MOUTH.corner) / 2;
   animator.sockets.set('bite', socketAt('bite', spineBoneAt(rig, biteU), toModel(0, bodyBottom(biteU) - 0.015, biteU)));

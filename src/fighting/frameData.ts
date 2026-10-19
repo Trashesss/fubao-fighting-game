@@ -56,6 +56,13 @@ export function reactionFor(hit: HitboxSpec, guard: Guard | null, clips: Reactio
 export interface MoveSpec {
   clip: PoseClip;
   hitboxes: HitboxSpec[];
+  /** 무적 [시작, 끝] 프레임 (끝 포함): 피격 캡슐이 꺼진다 — 잠수처럼 맞을 몸이 없는 구간 */
+  invuln?: [number, number];
+}
+
+/** 이 프레임에 피격 캡슐이 켜져 있는지 */
+export function hurtboxesActive(move: MoveSpec | undefined, frame: number): boolean {
+  return !move?.invuln || frame < move.invuln[0] || frame > move.invuln[1];
 }
 
 /**
