@@ -190,6 +190,60 @@ const SHOE_KICK: PoseClip = {
   ],
 };
 
+/** 물기 기술이 앞으로 들어가는 거리 (m) */
+const RISE_STEP = 0.3;
+const TEAR_STEP = 0.45;
+
+/**
+ * 솟구쳐 물기(상단): 꼬리로 튀어 오르며 입을 크게 벌리고, 정점에서 머리를 앞으로 숙이며 턱을 닫는다.
+ * 입이 배 쪽(정면)에 있어서 머리를 숙이면(headPitch +) 입이 상대 쪽 위로 향한다.
+ *   0–6f   움츠리며 입을 살짝 벌림
+ *   6–16f  튀어 오르며 입을 50° 까지 벌림 (정점 0.42 m)
+ *   16–19f 머리를 숙이며 턱을 닫음 — 17–19f 판정
+ *   22–30f 내려와 착지, 47f 까지 복귀 (RISE_STEP 앞에서 끝)
+ */
+const RISING_BITE: PoseClip = {
+  name: 'rising-bite',
+  length: 48,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 6, pose: { trunkPitch: 12, headPitch: -6, jaw: 8, pecR_pitch: -14, pecL_pitch: -14 } },
+    { f: 10, pose: { support: 0, hop: 0.08, tilt: 4, slide: RISE_STEP * 0.3, trunkPitch: 4, headPitch: 5, jaw: 30, pecR_pitch: 6, pecL_pitch: 6 }, ease: 'out' },
+    { f: 16, pose: { hop: 0.42, tilt: 10, slide: RISE_STEP * 0.8, trunkPitch: 10, headPitch: 25, jaw: 50, pecR_yaw: 30, pecL_yaw: 30, pecR_pitch: 25, pecL_pitch: 25 } },
+    { f: 19, pose: { headPitch: 30, jaw: 0, trunkPitch: 12 } },
+    { f: 22, pose: { slide: RISE_STEP, headPitch: 26 }, ease: 'in' },
+    { f: 30, pose: { support: 1, hop: 0, tilt: 0, trunkPitch: 14, headPitch: -4, pecR_yaw: 18, pecL_yaw: 18, pecR_pitch: -10, pecL_pitch: -10 } },
+    { f: 47, pose: { trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0 } },
+  ],
+};
+
+/**
+ * 비틀어 물어뜯기(강, 중단): 뒤로 젖혀 힘을 모았다가 앞으로 덤벼 물고(1타), 문 채로 몸통·머리를 좌우로 비틀어 뜯는다(2타).
+ *   0–8f   뒤로 젖히며 몸을 감음, 입을 벌리기 시작
+ *   8–17f  앞으로 덤빔 (깡총 0.45 m, 입 55°)
+ *   17–20f 착지하며 턱을 닫음 — 18–20f 1타
+ *   20–37f 오른쪽 → 왼쪽 → 오른쪽으로 비틀어 뜯기 — 27–33f 2타
+ *   37–44f 입을 벌려 놓아 줌, 59f 까지 복귀
+ */
+const TWIST_TEAR: PoseClip = {
+  name: 'twist-tear',
+  length: 60,
+  loop: false,
+  keys: [
+    { f: 0, pose: {} },
+    { f: 8, pose: { trunkPitch: -6, headPitch: -8, trunkTwist: 12, jaw: 15, pecR_yaw: 15, pecL_yaw: 15, pecR_pitch: -8, pecL_pitch: -8 } },
+    { f: 12, pose: { support: 0, hop: 0.06, slide: TEAR_STEP * 0.25, tilt: 6, trunkPitch: 4, headPitch: 6, trunkTwist: 4, jaw: 45 }, ease: 'out' },
+    { f: 17, pose: { hop: 0.12, slide: TEAR_STEP * 0.85, tilt: 12, trunkPitch: 12, headPitch: 22, trunkTwist: -6, jaw: 55, pecR_yaw: 30, pecL_yaw: 30, pecR_pitch: 18, pecL_pitch: 18 }, ease: 'in' },
+    { f: 20, pose: { support: 1, hop: 0, tilt: 0, slide: TEAR_STEP, trunkPitch: 16, headPitch: 24, trunkTwist: 0, jaw: 0, pecR_pitch: -6, pecL_pitch: -6 } },
+    { f: 26, pose: { trunkTwist: 30, headSide: 18, headTwist: 15 } },
+    { f: 32, pose: { trunkTwist: -30, headSide: -18, headTwist: -15 } },
+    { f: 37, pose: { trunkTwist: 14, headSide: 8, headTwist: 6 } },
+    { f: 44, pose: { trunkTwist: 0, headSide: 0, headTwist: 0, jaw: 25, trunkPitch: 6, headPitch: 4, pecR_yaw: 10, pecL_yaw: 10, pecR_pitch: 0, pecL_pitch: 0 } },
+    { f: 59, pose: { jaw: 0, trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0 } },
+  ],
+};
+
 export const CLIPS: Record<string, PoseClip> = {
   idle: IDLE,
   walk: WALK,
@@ -200,6 +254,8 @@ export const CLIPS: Record<string, PoseClip> = {
   'fin-jab': FIN_JAB,
   'tail-sweep': TAIL_SWEEP,
   'shoe-kick': SHOE_KICK,
+  'rising-bite': RISING_BITE,
+  'twist-tear': TWIST_TEAR,
 };
 
 /** 공격 판정. 발생·지속·회복은 moveFrames 로 계산된다. 판정 높이 기준은 docs/04-rig-animation.md */
@@ -207,4 +263,12 @@ export const MOVES: Record<string, MoveSpec> = {
   'fin-jab': { clip: FIN_JAB, hitboxes: [{ socket: 'pecR-tip', radius: 0.12, frames: [8, 10], height: 'high', damage: 8 }] },
   'tail-sweep': { clip: TAIL_SWEEP, hitboxes: [{ socket: 'tail-tip', radius: 0.18, frames: [14, 18], height: 'low', damage: 14 }] },
   'shoe-kick': { clip: SHOE_KICK, hitboxes: [{ socket: 'shoe', radius: 0.2, frames: [19, 23], height: 'mid', damage: 18 }] },
+  'rising-bite': { clip: RISING_BITE, hitboxes: [{ socket: 'bite', radius: 0.2, frames: [17, 19], height: 'high', damage: 16 }] },
+  'twist-tear': {
+    clip: TWIST_TEAR,
+    hitboxes: [
+      { socket: 'bite', radius: 0.2, frames: [18, 20], height: 'mid', damage: 10 },
+      { socket: 'bite', radius: 0.22, frames: [27, 33], height: 'mid', damage: 20 },
+    ],
+  },
 };

@@ -37,6 +37,7 @@ npm run build        # 타입 검사 + 빌드
 | `view=side\|front\|back\|top\|bottom\|three-quarter\|close-<부위>` | 카메라 (부위: snout, eye, gills, mouth, pectoral, dorsal, pelvic, caudal, shoe) |
 | `pose=swim` | 바인드 포즈(헤엄치는 자세). 기본은 서 있는 격투 자세 |
 | `shoe=0` | 운동화 빼기 |
+| `jaw=40` | 입을 그 각도만큼 벌림 (클립이 jaw 를 키로 잡지 않은 동안) |
 | `mode=zebra` / `mode=silhouette` | 얼룩말 반사 검사 / 검은 실루엣 |
 | `light=sea` | 바닷속 조명 (사실감 판단용) |
 | `cam=ortho` | 직교 카메라 (사진과 실루엣 비교) |

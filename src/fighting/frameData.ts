@@ -24,12 +24,15 @@ export interface MoveSpec {
 
 /**
  * 발생(startup) = 첫 판정이 나오는 프레임 번호 (1 부터 센다, 격투게임 표기 "i10" 과 같다),
- * 지속(active) = 판정이 있는 프레임 수, 회복(recovery) = 마지막 판정 뒤 클립 끝까지 프레임 수.
+ * 지속(active) = 판정이 하나라도 켜져 있는 프레임 수 (여러 번 때리는 기술은 사이 빈 프레임을 빼고 센다),
+ * 회복(recovery) = 마지막 판정 뒤 클립 끝까지 프레임 수, hits = 판정 구간 수.
  */
-export function moveFrames(move: MoveSpec): { startup: number; active: number; recovery: number; total: number } {
+export function moveFrames(move: MoveSpec): { startup: number; active: number; recovery: number; total: number; hits: number } {
   const start = Math.min(...move.hitboxes.map((h) => h.frames[0]));
   const end = Math.max(...move.hitboxes.map((h) => h.frames[1]));
-  return { startup: start + 1, active: end - start + 1, recovery: move.clip.length - 1 - end, total: move.clip.length };
+  let active = 0;
+  for (let f = start; f <= end; f++) if (activeHitboxes(move, f).length) active++;
+  return { startup: start + 1, active, recovery: move.clip.length - 1 - end, total: move.clip.length, hits: move.hitboxes.length };
 }
 
 /** 이 프레임에 켜져 있는 판정 */

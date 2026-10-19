@@ -2,6 +2,7 @@ import { Vector3 } from 'three';
 import { orientFaces, type PolyMesh } from '../../procedural/catmullClark';
 import { smoothstep } from '../../procedural/profile';
 import { CAUDAL, LANDMARKS, bodyBottom, bodyTop, sectionAt, sectionPoint } from './sharkAnatomy';
+import { MOUTH, headRingU, phiOf, rawCornerPhi } from './sharkMouth';
 
 /**
  * 부캉이 제어 케이지. 몸 링 22개 × 둘레 32점 + 주둥이·꼬리 끝 8×8 격자 덮개.
@@ -25,10 +26,12 @@ export const COLS = 32;
 const colTheta = (j: number) => Math.PI / 2 + (j + 0.5) * ((2 * Math.PI) / COLS);
 
 /**
- * 링 위치 (u). 지느러미 뿌리 면의 앞뒤 경계가 링에 오도록 고른다:
+ * 링 위치 (u, 등 쪽 값). 지느러미 뿌리 면의 앞뒤 경계가 링에 오도록 고른다:
  * 가슴 0.315–0.37, 첫 등 0.37–0.49, 배 0.53–0.59, 둘째 등·뒷 0.675–0.725, 꼬리 아래 엽 0.785–0.845.
+ * 머리 링 2~6 은 배 쪽에서 입 선을 따라 휜다 (MOUTH_RING 이 입 선 자체, sharkMouth.ts).
  */
-export const RINGS = [0.012, 0.035, 0.06, 0.085, 0.105, 0.13, 0.17, 0.23, 0.315, 0.37, 0.49, 0.53, 0.59, 0.64, 0.675, 0.725, 0.76, 0.785, 0.845, 0.89, 0.935, 0.975];
+export const RINGS = [0.012, 0.035, 0.06, 0.085, 0.11, 0.13, 0.15, 0.17, 0.23, 0.315, 0.37, 0.49, 0.53, 0.59, 0.64, 0.675, 0.725, 0.76, 0.785, 0.845, 0.89, 0.935, 0.975];
+export const MOUTH_RING = 4;
 const ringOf = (u: number) => {
   const r = RINGS.indexOf(u);
   if (r < 0) throw new Error(`링 ${u} 없음`);
@@ -47,6 +50,10 @@ export const DORSAL = rgb(0.45, 0.445, 0.41);
 export const FLANK = rgb(0.6, 0.6, 0.575);
 export const VENTRAL = rgb(0.93, 0.925, 0.9);
 export const DUSKY = rgb(0.2, 0.2, 0.19);
+// 입 안: 잇몸은 분홍, 입천장·바닥은 조금 어둡게, 목구멍은 검붉게
+const GUM = rgb(0.8, 0.55, 0.53);
+const PALATE = rgb(0.66, 0.45, 0.44);
+const THROAT = rgb(0.2, 0.08, 0.08);
 export const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 /**
@@ -229,18 +236,29 @@ export interface SharkCage {
   finLeadingEdges: Record<string, [number, number][]>;
   /** 각 지느러미의 행 중심 (뿌리 면 중심부터 끝 행까지, 모델 좌표) — 지느러미 뼈 배치용 */
   finRows: Record<string, { center: [number, number, number]; span: number }[]>;
+  /**
+   * 입 케이지 정점 (모두 오른쪽 구석 → 왼쪽 구석 순서, 양끝은 두 구석).
+   * lipUpper/lipLower = 틈의 위·아래 입술 (구석은 공유), gumUpper/gumLower = 이빨이 박히는 잇몸 행.
+   * hinge = 턱 관절 (두 입 구석을 잇는 x 축 위의 점, 모델 좌표)
+   */
+  mouth: { lipUpper: number[]; lipLower: number[]; gumUpper: number[]; gumLower: number[]; hinge: [number, number, number]; cornerPhi: number };
 }
 
 export function buildSharkCage(): SharkCage {
   const targets: number[] = [];
   const finSpan: number[] = [];
   const tint: number[] = [];
+  /** inner = 입 안 (0 바깥 피부, 1 주머니), jaw = 아래턱 뼈 가중치 — 서브디비전이 함께 부드럽게 나눈다 */
+  const inner: number[] = [];
+  const jaw: number[] = [];
   const faces: number[][] = [];
 
-  const addVertex = (p: Vector3, span: number, color: RGB) => {
+  const addVertex = (p: Vector3, span: number, color: RGB, innerW = 0, jawW = 0) => {
     targets.push(p.x, p.y, p.z);
     finSpan.push(span);
     tint.push(...color);
+    inner.push(innerW);
+    jaw.push(jawW);
     return targets.length / 3 - 1;
   };
   const bodyVertex = (u: number, theta: number) => {
@@ -248,8 +266,16 @@ export function buildSharkCage(): SharkCage {
     return addVertex(toModel(x, h, u), 0, bodyColor(u, Math.sin(theta)));
   };
 
+  // 입 구석 φ 를 가장 가까운 둘레 정점 각도에 맞춘다 (구석이 케이지 정점이어야 틈이 거기서 끝난다)
+  const colPhi = (j: number) => phiOf(colTheta(j));
+  let cornerCol = 0;
+  for (let j = 0; j < COLS; j++) if (Math.abs(colPhi(j) - rawCornerPhi()) < Math.abs(colPhi(cornerCol) - rawCornerPhi())) cornerCol = j;
+  const phiC = colPhi(cornerCol);
+
   // ── 몸 링 ────────────────────────────────────────────────────────────────
-  const ringVertex: number[][] = RINGS.map((u) => Array.from({ length: COLS }, (_, j) => bodyVertex(u, colTheta(j))));
+  const ringVertex: number[][] = RINGS.map((_, r) =>
+    Array.from({ length: COLS }, (_, j) => bodyVertex(headRingU(RINGS, MOUTH_RING, r, colPhi(j), phiC), colTheta(j))),
+  );
   for (let r = 0; r < RINGS.length - 1; r++) {
     for (let j = 0; j < COLS; j++) {
       const jn = (j + 1) % COLS;
@@ -257,6 +283,7 @@ export function buildSharkCage(): SharkCage {
     }
   }
   const bodyFace = (r: number, j: number) => r * COLS + j;
+  const P = (i: number) => new Vector3(targets[i * 3], targets[i * 3 + 1], targets[i * 3 + 2]);
 
   // ── 주둥이·꼬리 끝 덮개: 링 점들을 G×G 격자(G = COLS/4)의 테두리로 쓰고 안쪽 점을 돔 위에 둔다 ──
   const cap = (ring: number[], ringU: number, uAt: (rho: number) => number, endPoint: Vector3, endCenter: number) => {
@@ -302,17 +329,127 @@ export function buildSharkCage(): SharkCage {
       for (let gx = 0; gx < G; gx++) faces.push([grid[gy][gx], grid[gy][gx + 1], grid[gy + 1][gx + 1], grid[gy + 1][gx]]);
     }
   };
+  /**
+   * 입: 입 링(MOUTH_RING)의 두 구석 사이 정점을 복제해 틈을 낸다 (앞쪽 면 = 위 입술, 뒤쪽 면 = 아래 입술 → 복제본).
+   * 틈의 테두리 고리에서 주머니 행들을 안으로 밀어내 목구멍에서 닫는다.
+   *   잇몸 행: 입술 바로 안쪽 — 위 잇몸은 조금 앞, 아래 잇몸은 조금 뒤 (이빨이 박히는 곳)
+   *   입천장(위 벽) / 입바닥(아래 벽): 아래턱 피부를 안으로 τ 만큼 들인 면이 바닥, 그 위 cav 만큼이 천장.
+   *   뒤로 갈수록(s → 1) 좌우 폭을 좁혀 목구멍으로 모은다.
+   * 다물었을 때 주머니는 머리 속에 납작하게 들어 있고, 턱이 내려가면 아래 벽이 따라 내려가 입 안이 드러난다.
+   */
+  function buildMouth(): SharkCage['mouth'] {
+    const M = MOUTH_RING;
+    // 오른쪽 구석(φ=+φc) → 왼쪽 구석(φ=−φc) 순서의 열
+    const cols: number[] = [];
+    for (let j = cornerCol; ; j = (j - 1 + COLS) % COLS) {
+      cols.push(j);
+      if (Math.abs(colPhi(j) + phiC) < 1e-6) break;
+      if (cols.length > COLS) throw new Error('입 구석을 못 찾음');
+    }
+    const n = cols.length - 1;
+    const lipUpper = cols.map((j) => ringVertex[M][j]);
+    const lipLower = lipUpper.map((v, i) => {
+      if (i === 0 || i === n) return v;
+      return addVertex(P(v), 0, [tint[v * 3], tint[v * 3 + 1], tint[v * 3 + 2]], 0, 1);
+    });
+    jaw[lipUpper[0]] = jaw[lipUpper[n]] = 0.5;
+    // 입 링 뒤쪽 띠의 면들은 복제한 아래 입술을 쓴다
+    const dup = new Map(lipUpper.map((v, i) => [v, lipLower[i]]));
+    for (let j = 0; j < COLS; j++) {
+      const f = faces[bodyFace(M, j)];
+      faces[bodyFace(M, j)] = f.map((v) => dup.get(v) ?? v);
+    }
+    // 아래턱 피부 가중치: 입 안쪽 열은 링 M+1·M+2 가 1, M+3 이 0.45 (목 쪽으로 늘어난다), 구석 열은 절반
+    const lowerJaw: Record<number, number> = { [M + 1]: 1, [M + 2]: 1, [M + 3]: 0.45 };
+    cols.forEach((j, i) => {
+      const edge = i === 0 || i === n ? 0.5 : 1;
+      for (const [r, w] of Object.entries(lowerJaw)) jaw[ringVertex[+r][j]] = w * edge;
+    });
+
+    // 주머니 행 (TL 단위로 계산 → 모델 좌표)
+    const phis = cols.map(colPhi);
+    const skin = (u: number, phi: number, xs = 1) => {
+      const sec = sectionAt(u);
+      const x = sec.halfWidth * Math.sin(phi);
+      const h = sec.center - sec.halfHeight * Math.cos(phi);
+      // 바깥 법선 (단면 타원)
+      const nx = x / sec.halfWidth ** 2;
+      const nh = (h - sec.center) / sec.halfHeight ** 2;
+      const l = Math.hypot(nx, nh);
+      return { x: x * xs, h, u, nin: [-nx / l, -nh / l] as const };
+    };
+    const tl = (q: { x: number; h: number; u: number }, nin: readonly [number, number], d: number, du = 0) => toModel(q.x + nin[0] * d, q.h + nin[1] * d, q.u + du);
+    const S_ROWS = [0.2, 0.45, 0.72, 1];
+    const point = (i: number, row: number, wall: 'upper' | 'lower') => {
+      const phi = phis[i];
+      const u0 = P(lipUpper[i]).z; // 모델 z → u
+      const um = U0 - u0 / TL;
+      if (row === 0) {
+        // 잇몸: 입술에서 안으로 — 위는 앞(u−), 아래는 뒤(u+)로 조금 비켜서 이빨이 엇갈려 다물린다
+        const q = skin(um, phi);
+        return wall === 'upper' ? tl(q, q.nin, 0.006, -0.0025) : tl(q, q.nin, 0.0045, 0.003);
+      }
+      const s = S_ROWS[row - 1];
+      const q = skin(um + (MOUTH.throat - um) * s, phi, 1 - 0.55 * s ** 1.3);
+      const tau = 0.012 + 0.003 * s;
+      const cav = 0.003 + 0.014 * s;
+      return tl(q, q.nin, wall === 'upper' ? tau + cav : tau);
+    };
+    const rowColor = (row: number) => (row === 0 ? GUM : mix(PALATE, THROAT, S_ROWS[row - 1] ** 1.5));
+    const rows: number[][] = [[...lipUpper, ...lipLower.slice(1, n).reverse()]];
+    const gumUpper: number[] = [];
+    const gumLower: number[] = [];
+    for (let row = 0; row <= S_ROWS.length; row++) {
+      const s = row === 0 ? 0 : S_ROWS[row - 1];
+      const loop: number[] = [];
+      const upper: number[] = [];
+      const lower: number[] = [];
+      for (let i = 0; i <= n; i++) {
+        const corner = i === 0 || i === n;
+        // 아래 벽은 턱을 따라가고, 목구멍 쪽으로 갈수록 머리와 반반으로 늘어난다
+        const jawLower = 1 - 0.5 * smoothstep(0.3, 1, s);
+        if (corner) {
+          const c = point(i, row, 'upper').add(point(i, row, 'lower')).multiplyScalar(0.5);
+          const v = addVertex(c, 0, rowColor(row), 1, 0.5 * (jawLower + 0));
+          upper.push(v);
+          lower.push(v);
+        } else {
+          upper.push(addVertex(point(i, row, 'upper'), 0, rowColor(row), 1, 0.5 * smoothstep(0.6, 1, s)));
+          lower.push(addVertex(point(i, row, 'lower'), 0, rowColor(row), 1, jawLower));
+        }
+      }
+      if (row === 0) {
+        gumUpper.push(...upper);
+        gumLower.push(...lower);
+      }
+      loop.push(...upper, ...lower.slice(1, n).reverse());
+      rows.push(loop);
+    }
+    for (let k = 0; k < rows.length - 1; k++) {
+      const a = rows[k];
+      const b = rows[k + 1];
+      for (let i = 0; i < a.length; i++) {
+        const i1 = (i + 1) % a.length;
+        faces.push([a[i], a[i1], b[i1], b[i]]);
+      }
+    }
+    faces.push(rows[rows.length - 1].slice()); // 목구멍 끝 덮개
+    const c0 = P(lipUpper[0]);
+    return { lipUpper, lipLower, gumUpper, gumLower, hinge: [0, c0.y, c0.z], cornerPhi: phiC };
+  }
+
   const tipCenter = (bodyTop(0) + bodyBottom(0)) / 2;
   cap(ringVertex[0], RINGS[0], (rho) => RINGS[0] * rho * rho, toModel(0, tipCenter, 0), tipCenter);
   const last = RINGS[RINGS.length - 1];
   const endSec = sectionAt(CAUDAL.end);
   cap(ringVertex[RINGS.length - 1], last, (rho) => last + (CAUDAL.end - last) * (1 - rho * rho), toModel(0, endSec.center, CAUDAL.end), endSec.center);
 
+  const mouth = buildMouth();
+
   // 면 방향 통일 → 옆면(θ=0) 면의 법선이 +x 가 되도록
   const nv0 = targets.length / 3;
   orientFaces(faces, nv0);
   const probe = faces[bodyFace(ringOf(0.37), colOfFaceCenter(0))];
-  const P = (i: number) => new Vector3(targets[i * 3], targets[i * 3 + 1], targets[i * 3 + 2]);
   const pn = new Vector3().crossVectors(P(probe[1]).sub(P(probe[0])), P(probe[2]).sub(P(probe[1])));
   if (pn.x < 0) faces.forEach((f) => f.reverse());
 
@@ -393,10 +530,12 @@ export function buildSharkCage(): SharkCage {
     attributes: {
       finSpan: { size: 1, data: Float64Array.from(finSpan) },
       tint: { size: 3, data: Float64Array.from(tint) },
+      inner: { size: 1, data: Float64Array.from(inner) },
+      jaw: { size: 1, data: Float64Array.from(jaw) },
     },
   };
   if (mesh.attributes.finSpan.data.length !== n) throw new Error('속성 길이 불일치');
-  return { mesh, targets: Float64Array.from(targets), finCenters, finLeadingEdges, finRows };
+  return { mesh, targets: Float64Array.from(targets), finCenters, finLeadingEdges, finRows, mouth };
 }
 
 export { LANDMARKS };

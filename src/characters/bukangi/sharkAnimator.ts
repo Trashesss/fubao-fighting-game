@@ -18,7 +18,7 @@ import { DEG, aimBone, applySwimPose, bendRegion, type SharkRig } from './sharkR
  *   head*, trunk*, tail*   척추 구간 굽힘: Pitch(+ = 앞/배 쪽으로), Side(+ = 오른쪽으로), Twist(+ = 오른쪽이 뒤로)
  *   pecR/L_*    가슴지느러미(팔): yaw(+ = 바깥으로), pitch(+ = 위로), elbow(+ = 끝을 위로), elbowYaw
  *   pelR/L_*    배지느러미(발): 같은 규칙, knee 가 끝마디
- *   jaw         입 벌림 (턱 뼈가 생기면 쓴다)
+ *   jaw         입 벌림 (도, + = 벌림). 관절은 두 입 구석을 잇는 선
  */
 export const CHANNELS = [
   'tilt', 'turn', 'support', 'hop', 'slide', 'tailSlide', 'anchor', 'anchorTail',
@@ -222,6 +222,8 @@ export class SharkAnimator {
     limb('pectoral-fin-L', -1, 'pec', c.pecL_yaw, c.pecL_pitch, c.pecL_elbow, c.pecL_elbowYaw);
     limb('pelvic-fin-R', 1, 'pel', c.pelR_yaw, c.pelR_pitch, c.pelR_knee, 0);
     limb('pelvic-fin-L', -1, 'pel', c.pelL_yaw, c.pelL_pitch, c.pelL_knee, 0);
+    // 턱: 두 입 구석을 잇는 관절 축으로 벌린다 (+ = 벌림)
+    rig.jaw.rotation.set(c.jaw * DEG, 0, 0);
 
     if (!ground) return;
     // 접지: 가장 낮은 접지점을 hop 높이에, 신발(또는 꼬리 끝)은 기본 자세 자리 + slide 에 고정 (turn 으로 돌아도 그 자리에 남는다)

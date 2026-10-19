@@ -21,6 +21,8 @@ import { createSneaker } from './sneaker';
 import { NEUTRAL, SharkAnimator } from './sharkAnimator';
 import { TOTAL_LENGTH, U0, bodyColor, buildSharkCage, mix, toModel } from './sharkCage';
 import { buildSkinMaps } from './skinMaps';
+import { buildTeeth } from './sharkTeeth';
+import { MOUTH } from './sharkMouth';
 import { SPINE_STATIONS, applyStandingPose, applySwimPose, bindWeights, buildSharkRig, solveStandingTilt, type SharkRig } from './sharkRig';
 
 /**
@@ -125,10 +127,11 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
   const nv = p.length / 3;
   const span = fine.attributes.finSpan.data;
   const tint = fine.attributes.tint.data;
+  const inner = fine.attributes.inner.data;
 
   // 눈자리: 몸 정점을 단면 바깥 방향으로 실제로 민다 (눈알이 앉을 오목)
   for (let i = 0; i < nv; i++) {
-    if (span[i] > 0.02) continue;
+    if (span[i] > 0.02 || inner[i] > 0.001) continue;
     const x = p[i * 3] / TL;
     const h = p[i * 3 + 1] / TL;
     const u = U0 - p[i * 3 + 2] / TL;
@@ -140,7 +143,7 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     p[i * 3 + 1] += n.y * d * TL;
   }
 
-  const geometry = toBufferGeometry({ positions: p, faces: fine.faces, attributes: { finSpan: fine.attributes.finSpan } });
+  const geometry = toBufferGeometry({ positions: p, faces: fine.faces, attributes: { finSpan: fine.attributes.finSpan, inner: fine.attributes.inner, jaw: fine.attributes.jaw } });
   const colors = new Float32Array(nv * 3);
   const uvs = new Float32Array(nv * 2);
   const mask = new Float32Array(nv);
@@ -149,13 +152,13 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     const h = p[i * 3 + 1] / TL;
     const u = Math.min(1, Math.max(0, U0 - p[i * 3 + 2] / TL));
     const theta = thetaOf(u, x, h);
-    // 몸은 위치에서 바로 계산한 또렷한 체색, 지느러미는 케이지에서 함께 나뉜 색으로 넘어간다
-    const w = smoothstep(0, 0.25, span[i]);
+    // 몸은 위치에서 바로 계산한 또렷한 체색, 지느러미·입 안은 케이지에서 함께 나뉜 색으로 넘어간다
+    const w = Math.max(smoothstep(0, 0.25, span[i]), smoothstep(0.08, 0.5, inner[i]));
     const c = mix(bodyColor(u, Math.sin(theta)), [tint[i * 3], tint[i * 3 + 1], tint[i * 3 + 2]], w);
     colors.set(c, i * 3);
     uvs[i * 2] = (((theta + Math.PI / 2) / (Math.PI * 2)) % 1 + 1) % 1;
     uvs[i * 2 + 1] = u;
-    mask[i] = 1 - smoothstep(0.02, 0.12, span[i]);
+    mask[i] = (1 - smoothstep(0.02, 0.12, span[i])) * (1 - smoothstep(0, 0.15, inner[i]));
   }
   geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
@@ -193,6 +196,18 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
   root.add(body);
   root.updateMatrixWorld(true);
   body.bind(rig.skeleton);
+
+  // ── 이빨: 잇몸 행을 따라, 잇몸과 같은 스키닝 ─────────────────────────────────
+  const teethGeometry = buildTeeth(
+    p,
+    cage.mouth,
+    bodyGeometry.getAttribute('skinIndex').array as ArrayLike<number>,
+    bodyGeometry.getAttribute('skinWeight').array as ArrayLike<number>,
+  );
+  const teeth = new SkinnedMesh(teethGeometry, new MeshPhysicalMaterial({ color: 0xf1ede2, roughness: 0.32, clearcoat: 0.4, clearcoatRoughness: 0.2 }));
+  teeth.name = 'teeth';
+  root.add(teeth);
+  teeth.bind(rig.skeleton, body.bindMatrix);
 
   // ── 눈 ───────────────────────────────────────────────────────────────────
   const eyeMaterial = new MeshPhysicalMaterial({ map: eyeTexture(), roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.03 });
@@ -302,6 +317,9 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
     animator.sockets.set(`pec${side}-tip`, socketAt(`pec${side}-tip`, chain[2], new Vector3(...rows[rows.length - 1].center)));
   }
   animator.sockets.set('tail-tip', tailTip);
+  // 물기 판정 기준: 입 가운데 (입 앞끝과 구석 사이) 배 쪽 피부에서 조금 바깥. 위턱(머리)을 따른다
+  const biteU = (MOUTH.front + MOUTH.corner) / 2;
+  animator.sockets.set('bite', socketAt('bite', spineBoneAt(rig, biteU), toModel(0, bodyBottom(biteU) - 0.015, biteU)));
   if (sneaker) animator.sockets.set('shoe', shoeMarkers[1]);
 
   if ((options.pose ?? 'stand') === 'swim') {

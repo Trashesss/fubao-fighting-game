@@ -10,6 +10,7 @@ import { TOTAL_LENGTH, U0, toModel, type SharkCage } from './sharkCage';
  * 몸 가중치는 3차 B-스플라인(뼈 4개)이라 굽힘이 뼈 마디에서 꺾이지 않고 곡선으로 이어진다.
  * 큰 굽힘(90°)은 구간 총량으로 정해 그 구간의 뼈들에 매끈하게 나눈다 (한 뼈에 몰면 안쪽이 접힌다).
  * 짝지느러미: 가슴(팔)·배(발)마다 뿌리·중간·끝 3마디.
+ * 아래턱: 두 입 구석을 잇는 선(x 축)이 관절이다 — 구석은 턱을 벌려도 움직이지 않는다. 로컬 x 회전 + = 벌림.
  */
 const SPINE_STEP = 0.03;
 export const SPINE_STATIONS = Array.from({ length: 33 }, (_, i) => +(0.02 + i * SPINE_STEP).toFixed(3));
@@ -20,6 +21,7 @@ export interface SharkRig {
   root: Bone;
   spine: Bone[];
   limbs: Record<string, Bone[]>;
+  jaw: Bone;
   skeleton: Skeleton;
 }
 
@@ -60,8 +62,14 @@ export function buildSharkRig(cage: SharkCage): SharkRig {
     limbs[name] = chain;
   }
 
-  const bones = [...spine, ...Object.values(limbs).flat()];
-  return { root: spine[ROOT], spine, limbs, skeleton: new Skeleton(bones) };
+  const jaw = new Bone();
+  jaw.name = 'jaw';
+  const hinge = new Vector3(...cage.mouth.hinge);
+  const jawParent = nearestStation(U0 - hinge.z / TOTAL_LENGTH);
+  attach(jaw, spine[jawParent], hinge, world[jawParent]);
+
+  const bones = [...spine, ...Object.values(limbs).flat(), jaw];
+  return { root: spine[ROOT], spine, limbs, jaw, skeleton: new Skeleton(bones) };
 }
 
 function nearestStation(u: number): number {
@@ -99,10 +107,13 @@ function stationWeights(stations: readonly number[], x: number): [number, number
 /**
  * 스키닝 가중치. 몸 정점은 척추 위치 u 로 이웃한 두 척추 뼈에,
  * 짝지느러미 정점은 finSpan 으로 지느러미 3마디에 나눈다. 뿌리(finSpan→0)에서는 몸 가중치로 넘어간다.
+ * 아래턱은 케이지에서 함께 나뉜 jaw 속성(0~1)만큼 턱 뼈에, 나머지는 몸 가중치 중 큰 3개에 준다.
  */
 export function bindWeights(geometry: BufferGeometry, rig: SharkRig, cage: SharkCage): void {
   const pos = geometry.getAttribute('position');
   const span = geometry.getAttribute('finSpan');
+  const jawAttr = geometry.getAttribute('jaw');
+  const jawBone = boneIndex_(rig, rig.jaw);
   const n = pos.count;
   const index = new Uint16Array(n * 4);
   const weight = new Float32Array(n * 4);
@@ -138,7 +149,12 @@ export function bindWeights(geometry: BufferGeometry, rig: SharkRig, cage: Shark
         slots.push([boneIndex.get(chain[a])!, limbW * wa], [boneIndex.get(chain[b])!, limbW * (1 - wa)]);
       }
     }
-    if (slots.length === 0) {
+    const jw = jawAttr ? jawAttr.getX(i) : 0;
+    if (slots.length === 0 && jw > 0.001) {
+      const body = splineWeights(u).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const sum = body.reduce((acc, [, w]) => acc + w, 0);
+      slots.push([jawBone, jw], ...body.map(([j, w]) => [boneIndex.get(rig.spine[j])!, ((1 - jw) * w) / sum] as [number, number]));
+    } else if (slots.length === 0) {
       for (const [j, w] of splineWeights(u)) slots.push([boneIndex.get(rig.spine[j])!, w]);
     } else {
       // 지느러미 정점은 지느러미 2마디 + 척추 2개 (영향 4개 한도)
@@ -154,6 +170,8 @@ export function bindWeights(geometry: BufferGeometry, rig: SharkRig, cage: Shark
   geometry.setAttribute('skinIndex', new Uint16BufferAttribute(index, 4));
   geometry.setAttribute('skinWeight', new Float32BufferAttribute(weight, 4));
 }
+
+const boneIndex_ = (rig: SharkRig, bone: Bone) => rig.skeleton.bones.indexOf(bone);
 
 export const DEG = Math.PI / 180;
 

@@ -1,17 +1,20 @@
 import { Mesh, type Object3D } from 'three';
 import { curvatureSignChanges, designedCurveReport } from './sharkAnatomy';
 import { TOTAL_LENGTH, U0 } from './sharkCage';
+import { MOUTH } from './sharkMouth';
 
 /**
  * 곡률 검사. 기준: 몸 윗선·아랫선 부호 바뀜 ≤ 2, 지느러미 앞전 ≤ 1.
  *   designed : 설계 곡선 (윗선·아랫선·폭)
- *   mesh     : 나뉜 메시의 등·배 정중선 (지느러미 뿌리 구간은 빼고 이어진 구간마다 센다)
+ *   mesh     : 나뉜 메시의 등·배 정중선 (지느러미 뿌리 구간은 빼고 이어진 구간마다 센다).
+ *              입 안(inner > 0)은 빼고, 배 정중선은 입 틈(위·아래 입술)에서 끊는다 — 입술이 안으로 말리는 곳은 곡면 출렁임이 아니다
  *   fins     : 지느러미 앞전 조절 다각형 (변동 감소 성질 — 조절 다각형이 한 방향으로만 꺾이면 한계 곡선도 그렇다)
  */
 export function qualityReport(model: Object3D) {
   const body = model.getObjectByName('body') as Mesh;
   const pos = body.geometry.getAttribute('position');
   const span = body.geometry.getAttribute('finSpan');
+  const inner = body.geometry.getAttribute('inner');
   const TL = TOTAL_LENGTH;
 
   const where: Record<string, number[]> = { top: [], bottom: [] };
@@ -19,7 +22,7 @@ export function qualityReport(model: Object3D) {
     const pts: [number, number][] = [];
     const seen = new Set<string>();
     for (let i = 0; i < pos.count; i++) {
-      if (Math.abs(pos.getX(i)) > 1e-5 || span.getX(i) > 1e-4) continue;
+      if (Math.abs(pos.getX(i)) > 1e-5 || span.getX(i) > 1e-4 || (inner && inner.getX(i) > 1e-4)) continue;
       const u = U0 - pos.getZ(i) / TL;
       if (u < 0.03 || u > 0.75) continue;
       const h = pos.getY(i) / TL;
@@ -33,7 +36,8 @@ export function qualityReport(model: Object3D) {
     // 지느러미 뿌리 구간에서 끊어 이어진 구간마다 센다
     const segments: [number, number][][] = [[]];
     for (let i = 0; i < pts.length; i++) {
-      if (i > 0 && pts[i][0] - pts[i - 1][0] > 0.01) segments.push([]);
+      const acrossMouth = !upper && i > 0 && pts[i - 1][0] < MOUTH.front && pts[i][0] >= MOUTH.front;
+      if (i > 0 && (pts[i][0] - pts[i - 1][0] > 0.01 || acrossMouth)) segments.push([]);
       segments[segments.length - 1].push(pts[i]);
     }
     return segments.filter((s) => s.length > 4).reduce((n, s) => n + curvatureSignChanges(s, 0.03, where[upper ? 'top' : 'bottom']), 0);

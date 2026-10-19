@@ -122,7 +122,6 @@ export function thetaOf(u: number, x: number, h: number): number {
 const GILL_TOP = LANDMARKS.gillSlits[0][1];
 const GILL_BOTTOM = LANDMARKS.gillSlits[0][2];
 const MOUTH_CORNER_U = LANDMARKS.mouthCorner[0];
-const MOUTH_FRONT_U = 0.066; // 흉상어 입 앞 길이 ≈ 0.07 TL
 export const EYE_U = LANDMARKS.eye[0];
 export const EYE_H = LANDMARKS.eye[1];
 export const EYE_RADIUS = LANDMARKS.eyeRadius * 0.95;
@@ -144,18 +143,19 @@ function gillSlits(u: number, ax: number, w: number, h: number): number {
   return along * side * d;
 }
 
+/**
+ * 입 구석 뒤의 입술 고랑(labial furrow)만 남긴다. 입 선 자체는 이제 케이지의 실제 틈이다 (sharkMouth.ts) —
+ * 노멀 맵 선을 같이 두면 틈 바깥에 선이 하나 더 보였다.
+ */
 function mouth(u: number, ax: number, S: number): number {
   if (u > 0.2 || S > -0.1) return 0;
   const xc = 0.82 * halfWidth(MOUTH_CORNER_U);
-  const reach = Math.min(1.15, ax / xc);
-  const du = u - (MOUTH_FRONT_U + (MOUTH_CORNER_U - MOUTH_FRONT_U) * reach ** 1.7);
-  const fade = smoothstep(-0.1, -0.35, S) * (1 - smoothstep(1.0, 1.12, ax / xc));
   const furrow =
     smoothstep(-0.1, -0.3, S) *
     bell((ax - xc * 0.97) / 0.0014) *
     smoothstep(MOUTH_CORNER_U - 0.016, MOUTH_CORNER_U - 0.004, u) *
     (1 - smoothstep(MOUTH_CORNER_U, MOUTH_CORNER_U + 0.004, u));
-  return fade * -0.0016 * bell(du / 0.0007) - 0.0004 * furrow;
+  return -0.0004 * furrow;
 }
 
 function nostrils(u: number, ax: number, S: number): number {

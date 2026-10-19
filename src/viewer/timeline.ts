@@ -158,8 +158,9 @@ export class Timeline {
     if (move) {
       // 프레임 데이터와 지금 구간: 발생(판정 전) / 지속 / 회복
       const fd = moveFrames(move);
-      const phase = this.frame < fd.startup - 1 ? '발생' : this.frame < fd.startup - 1 + fd.active ? '■ 지속' : '회복';
-      this.label.textContent += `   발생 ${fd.startup} · 지속 ${fd.active} · 회복 ${fd.recovery}   [${phase}]`;
+      const lastActive = Math.max(...move.hitboxes.map((h) => h.frames[1]));
+      const phase = activeHitboxes(move, this.frame).length ? '■ 지속' : this.frame < fd.startup - 1 ? '발생' : this.frame > lastActive ? '회복' : '사이';
+      this.label.textContent += `   발생 ${fd.startup} · 지속 ${fd.active}${fd.hits > 1 ? ` (${fd.hits}타)` : ''} · 회복 ${fd.recovery}   [${phase}]`;
       const on = activeHitboxes(move, this.frame);
       for (const m of this.hits.children as Mesh[]) {
         const h = m.userData.hit as (typeof move.hitboxes)[number];

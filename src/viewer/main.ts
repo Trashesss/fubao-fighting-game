@@ -49,6 +49,7 @@ import { qualityReport } from '../characters/bukangi/qualityReport';
  *   light=sea          사실감 판단용 조명 (위에서 내리는 차가운 빛 + 약한 안개)
  *   pose=swim          바인드 포즈 (헤엄치는 자세) — 기본은 서 있는 격투 자세
  *   shoe=0             운동화 빼기 (사진 실루엣 비교용)
+ *   jaw=30             입을 그 각도(도)만큼 벌린다 (클립이 jaw 를 키로 잡지 않은 동안)
  *   hide=a,b           이름에 a 나 b 가 들어간 부위 숨김
  *   explode=1          부위 분해
  *   shot=1             UI 숨김
@@ -388,7 +389,7 @@ addEventListener('resize', () => {
 let timeline: Timeline | null = null;
 if (standing && !silhouette) {
   const clip = CLIPS[params.get('anim') ?? 'idle'] ?? CLIPS.idle;
-  timeline = new Timeline(animator, CLIPS, clip, NEUTRAL, scene, model, MOVES);
+  timeline = new Timeline(animator, CLIPS, clip, { ...NEUTRAL, jaw: Number(params.get('jaw') ?? 0) }, scene, model, MOVES);
   if (params.has('frame')) {
     timeline.setPlaying(false);
     timeline.frame = Number(params.get('frame'));
@@ -396,6 +397,8 @@ if (standing && !silhouette) {
   }
   if (params.get('boxes') === '1') timeline.showBoxes(true);
 }
+
+if (!standing && params.has('jaw')) model.getObjectByName('jaw')!.rotation.x = (Number(params.get('jaw')) * Math.PI) / 180;
 
 let last = performance.now();
 renderer.setAnimationLoop(() => {
