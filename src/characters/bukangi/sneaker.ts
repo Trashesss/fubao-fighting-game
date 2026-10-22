@@ -87,12 +87,12 @@ export interface Sneaker {
   collar: Vector3;
 }
 
-/** scale: 실제 신발(약 32 cm) 대비 배율 */
-export function createSneaker(scale = 1): Sneaker {
+/** scale: 실제 신발(약 32 cm) 대비 배율, color: 갑피 색 (기본 밈의 파랑. 연습 모드 2P 는 다른 색으로 구분한다) */
+export function createSneaker(scale = 1, color = 0x2f9fe0): Sneaker {
   const group = new Group();
   group.name = 'sneaker';
 
-  const blue = new MeshPhysicalMaterial({ color: 0x2f9fe0, roughness: 0.78, sheen: 0.6, sheenRoughness: 0.8, sheenColor: 0x9fd6ff });
+  const blue = new MeshPhysicalMaterial({ color, roughness: 0.78, sheen: 0.6, sheenRoughness: 0.8, sheenColor: color === 0x2f9fe0 ? 0x9fd6ff : 0xffffff });
   const white = new MeshPhysicalMaterial({ color: 0xf2f2ef, roughness: 0.55 });
   const rubber = new MeshPhysicalMaterial({ color: 0x4a4c50, roughness: 0.85 });
 

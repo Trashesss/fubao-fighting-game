@@ -262,6 +262,14 @@ export class SharkAnimator {
     };
   }
 
+  /**
+   * 딛는 발(신발 밑창 가운데)의 바닥 위 위치 (캐릭터 좌표, y = 0).
+   * 게임이 동작을 바꿀 때 이 점이 제자리에 남도록 캐릭터 위치를 넘겨준다 (동작마다 slide 가 0 에서 시작하므로)
+   */
+  groundAnchor(out = new Vector3()): Vector3 {
+    return this.local(this.anchorPoint(), out).setY(0);
+  }
+
   /** 검사용: 소켓의 캐릭터 좌표 */
   socketPosition(name: string, out = new Vector3()): Vector3 {
     return this.local(this.sockets.get(name)!, out);

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>연습 모드</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #d9d9d6; overflow: hidden; font-family: system-ui, sans-serif; }
+      canvas { display: block; }
+      .box { position: fixed; padding: 8px 10px; border-radius: 8px; background: rgb(0 0 0 / 0.62); color: #f2f2f2; font-size: 12.5px; line-height: 1.5; }
+      #bars { position: fixed; top: 12px; left: 16px; right: 16px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: center; }
+      .bar { height: 16px; border-radius: 4px; background: rgb(0 0 0 / 0.45); overflow: hidden; position: relative; }
+      .bar > i { position: absolute; top: 0; bottom: 0; background: #f0c419; }
+      #bar1 > i { right: 0; }
+      #bar2 > i { left: 0; }
+      .name { font-size: 13px; color: #222; font-weight: 600; margin-bottom: 3px; }
+      #bars > div:nth-child(3) .name { text-align: right; }
+      #clock { font: 600 13px ui-monospace, monospace; color: #222; text-align: center; min-width: 120px; }
+      #state { left: 16px; bottom: 16px; font-family: ui-monospace, monospace; min-width: 420px; }
+      #state b { color: #ffd34d; font-weight: 600; }
+      #state .ok { color: #7ee08a; }
+      #state .bad { color: #ff7a6b; }
+      #help { right: 16px; bottom: 16px; width: 270px; }
+      #help select, #help button { border: 0; border-radius: 6px; padding: 3px 8px; background: #2b2b2b; color: #f2f2f2; font-size: 12px; }
+      #help button[aria-pressed='true'] { background: #c0392b; }
+      #help kbd { display: inline-block; min-width: 14px; padding: 0 4px; border-radius: 3px; background: #3a3a3a; text-align: center; font: 11px ui-monospace, monospace; }
+      #help .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 4px 0; }
+      body.shot #help { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="bars">
+      <div><div class="name" id="name1"></div><div class="bar" id="bar1"><i></i></div></div>
+      <div id="clock"></div>
+      <div><div class="name" id="name2"></div><div class="bar" id="bar2"><i></i></div></div>
+    </div>
+    <div id="state" class="box"></div>
+    <div id="help" class="box"></div>
+    <script type="module" src="/src/practice/main.ts"></script>
+  </body>
+</html>

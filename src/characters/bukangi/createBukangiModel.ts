@@ -49,6 +49,8 @@ export interface BukangiModelOptions {
   pose?: 'stand' | 'swim';
   /** 꼬리 아래 엽에 운동화를 신긴다 (기본 true) */
   shoe?: boolean;
+  /** 운동화 갑피 색 (기본 파랑) */
+  sneakerColor?: number;
 }
 
 /**
@@ -250,7 +252,7 @@ export function createBukangiModel(options: BukangiModelOptions = {}): Group {
   const lobeRows = cage.finRows['caudal-fin-lower'];
   const lobeTip = new Vector3(...lobeRows[lobeRows.length - 1].center);
   const withShoe = options.shoe ?? true;
-  const sneaker = withShoe ? createSneaker(SNEAKER_SCALE) : null;
+  const sneaker = withShoe ? createSneaker(SNEAKER_SCALE, options.sneakerColor) : null;
   const tilt = solveStandingTilt(rig, upperTip, lobeTip, sneaker ? sneaker.collar.y : 0);
   applyStandingPose(rig, tilt);
   root.updateMatrixWorld(true);

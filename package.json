@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "check": "tools/render/check.sh"
+    "check": "tools/render/check.sh",
+    "check:practice": "tools/render/practice-check.sh"
   },
   "dependencies": {
     "three": "^0.186.1"

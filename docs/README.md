@@ -28,6 +28,12 @@ npm run build        # 타입 검사 + 빌드
 필요한 것: Node 20 이상, Google Chrome(헤드리스 스크린샷·검사), 사진 측정 도구를 쓸 때만 [uv](https://docs.astral.sh/uv/)
 (Python 3.10+ 와 pillow·numpy 를 `uv run --with` 로 그때그때 받는다. 시스템 Python 에 설치하지 않는다).
 
+## 연습 모드
+
+`http://localhost:5317/practice.html` — 부캉이 두 마리 2.5D 대결 (D-18). 1P: `A` `D` 이동(앞 두 번 = 대시), `W` 점프, `S` 앉기, 뒤 = 막기, `J K L U I O` 기술.
+`P` 멈춤 · `F` 한 프레임 · `T` ¼ 속도 · `B` 판정 표시 · `R` 위치 초기화. 오른쪽 아래에서 상대 행동(서 있기·막기·점프·2P 조작)을 고른다.
+화면 왼쪽 아래에 지금 프레임과 마지막 기술의 이득 프레임(측정 / 계산)이 나온다. URL 파라미터는 `src/practice/main.ts` 머리 주석.
+
 ## 뷰어 URL 파라미터 요약
 
 `http://localhost:5317/?…` — 전체 목록은 `src/viewer/main.ts` 머리 주석.

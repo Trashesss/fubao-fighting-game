@@ -113,21 +113,24 @@ function jump(name: string, forward: number): PoseClip {
 }
 
 /**
- * 지느러미 잽(약, 상단): 오른쪽 가슴지느러미로 빠르게 찌른다. 두 점 접지는 그대로(support=1) — 발이 움직이지 않는 가장 빠른 기술.
+ * 지느러미 잽(약, 상단): 오른쪽 가슴지느러미로 빠르게 찌르며 두 발을 붙인 채 JAB_STEP 만큼 미끄러지듯 내딛는다 (support=1).
  *   0–3f  지느러미를 살짝 뒤로 당김 (예비 동작)
- *   3–8f  몸통을 오른쪽 앞으로 비틀며 지느러미 끝을 정면으로 뻗음
+ *   3–8f  몸통을 오른쪽 앞으로 비틀며 지느러미 끝을 정면으로 뻗고, 두 발이 바닥에 붙은 채 앞으로 미끄러짐 (skid 3–8f)
  *   8–10f 판정 (뻗은 채 유지)
  *   10–25f 거둬들이고 가드로 복귀
- * 지느러미가 짧아 끝이 신발 앞 약 0.6 m 까지만 나간다 (몸통을 숙여도 지느러미 뿌리가 내려갈 뿐 더 나가지 않는다).
+ * 지느러미가 짧아 끝이 신발 앞 약 0.6 m 까지만 나간다 (몸통을 숙여도 지느러미 뿌리가 내려갈 뿐 더 나가지 않는다 — 22° 숙여도 연습 모드 사거리 그대로).
+ * 제자리 잽은 연습 모드에서 맞는 간격이 0.92–1.0 m 뿐이라, 맞고 0.14 m 밀려난 상대에게 잽을 이어 치면 헛쳤다 → 내딛는다.
  */
+const JAB_STEP = 0.18;
 const FIN_JAB: PoseClip = {
   name: 'fin-jab',
   length: 26,
   loop: false,
+  skid: [3, 8],
   keys: [
     { f: 0, pose: {} },
-    { f: 3, pose: { pecR_yaw: 10, pecR_pitch: -10, pecR_elbow: 8, trunkTwist: 6, pecL_yaw: 4, pecL_pitch: 4 } },
-    { f: 8, pose: { pecR_yaw: -30, pecR_pitch: 6, pecR_elbow: -12, trunkTwist: -18, trunkPitch: 12, headPitch: -6, pecL_yaw: 10, pecL_pitch: 8 }, ease: 'out' },
+    { f: 3, pose: { slide: 0, tailSlide: 0, pecR_yaw: 10, pecR_pitch: -10, pecR_elbow: 8, trunkTwist: 6, pecL_yaw: 4, pecL_pitch: 4 } },
+    { f: 8, pose: { slide: JAB_STEP, tailSlide: JAB_STEP, pecR_yaw: -30, pecR_pitch: 6, pecR_elbow: -12, trunkTwist: -18, trunkPitch: 12, headPitch: -6, pecL_yaw: 10, pecL_pitch: 8 }, ease: 'out' },
     { f: 10, pose: { pecR_yaw: -31, pecR_pitch: 5, trunkTwist: -19 } },
     { f: 25, pose: { pecR_yaw: 0, pecR_pitch: 0, pecR_elbow: 0, trunkTwist: 0, trunkPitch: 0, headPitch: 0, pecL_yaw: 0, pecL_pitch: 0 } },
   ],
@@ -160,18 +163,25 @@ const TAIL_SWEEP: PoseClip = {
   ],
 };
 
-/** 신발 킥에서 꼬리로 디디며 들어가는 거리 (m) */
-const KICK_STEP = 0.85;
+/** 신발 킥에서 꼬리로 깡총 들어가는 거리 (m) */
+const KICK_STEP = 0.7;
+/**
+ * 차올리는 동안 꼬리 끝이 공중에서 더 나아가는 거리 (m).
+ * 꼬리 끝을 축으로 신발을 차올리면 몸 전체가 뒤로 돌아 몸통 가운데가 꼬리 끝 대비 0.8 m 뒤로 간다 (probe: tailPitch 58·tilt 6).
+ * 연습 모드에서 두 몸이 밀어내기로 겹치지 않으니, 꼬리 끝이 그 자리에 딛고 차면 신발이 상대 배 앞 0.36 m 에서 멈췄다.
+ * 그래서 차올리는 동안 공중에서 그만큼 더 나아가 몸통 가운데가 거의 제자리에 머물게 한다.
+ */
+const KICK_LUNGE = 0.7;
 
 /**
- * 신발 킥(중단): 꼬리로 깡총 한 걸음 들어가 꼬리 위 엽 끝으로 딛고, 운동화 신은 아래 엽을 앞으로 차올린다.
+ * 신발 킥(중단): 꼬리로 깡총 뛰어 들어가며 공중에서 운동화 신은 아래 엽을 앞으로 차올리고, 꼬리 위 엽 끝으로 착지한다.
  * 꼬리 끝과 신발 거리가 고정(약 1.07 m)이라 제자리에서 차면 신발이 원래 자리보다 뒤에서 올라간다 → 들어가며 찬다.
  * 꼬리 구간을 뒤로 굽히면(tailPitch +) 꼬리 끝을 축으로 꼬리지느러미 전체가 돌아 신발이 들린다.
  *   0–6f   움츠림
- *   6–16f  깡총 앞으로 (고정점을 꼬리 끝으로 바꾼다, anchorTail=1)
- *   16–20f 꼬리 끝으로 딛고 차올림 — 19–23f 판정
+ *   6–22f  깡총 앞으로 (고정점을 꼬리 끝으로 바꾼다, anchorTail=1). 16f 부터 공중에서 차올림 — 19–23f 판정
+ *   22f    꼬리 끝으로 착지
  *   23–38f 신발을 내려 두 점으로 다시 딛음
- *   38–49f 복귀 (KICK_STEP 만큼 앞에서 끝난다)
+ *   38–49f 복귀 (KICK_STEP + KICK_LUNGE 만큼 앞에서 끝난다)
  */
 const SHOE_KICK: PoseClip = {
   name: 'shoe-kick',
@@ -181,8 +191,9 @@ const SHOE_KICK: PoseClip = {
     { f: 0, pose: {} },
     { f: 6, pose: { trunkPitch: 10, headPitch: -5, pecR_pitch: -10, pecL_pitch: -10 } },
     { f: 10, pose: { support: 0, anchorTail: 1, hop: 0.08, tailSlide: KICK_STEP * 0.35, slide: KICK_STEP * 0.35, tailPitch: 10, trunkPitch: 2, headPitch: 0 }, ease: 'out' },
-    { f: 16, pose: { hop: 0, tailSlide: KICK_STEP, slide: KICK_STEP, tailPitch: 25, tilt: 3, pecR_yaw: 15, pecL_yaw: 15 }, ease: 'in' },
-    { f: 20, pose: { tailPitch: 58, tilt: 6, trunkPitch: -8, headPitch: 4, pecR_yaw: 28, pecL_yaw: 28, pecR_pitch: 20, pecL_pitch: 20 }, ease: 'out' },
+    { f: 16, pose: { hop: 0.1, tailSlide: KICK_STEP, slide: KICK_STEP, tailPitch: 25, tilt: 3, pecR_yaw: 15, pecL_yaw: 15 } },
+    { f: 20, pose: { hop: 0.03, tailSlide: KICK_STEP + KICK_LUNGE * 0.85, slide: KICK_STEP + KICK_LUNGE * 0.85, tailPitch: 58, tilt: 6, trunkPitch: -8, headPitch: 4, pecR_yaw: 28, pecL_yaw: 28, pecR_pitch: 20, pecL_pitch: 20 } },
+    { f: 22, pose: { hop: 0, tailSlide: KICK_STEP + KICK_LUNGE, slide: KICK_STEP + KICK_LUNGE }, ease: 'in' },
     { f: 23, pose: { tailPitch: 60 } },
     { f: 32, pose: { tailPitch: 15, tilt: 2, trunkPitch: 4, pecR_yaw: 10, pecL_yaw: 10, pecR_pitch: 0, pecL_pitch: 0 } },
     { f: 38, pose: { support: 1, tailPitch: 0, tilt: 0, trunkPitch: 10, headPitch: -5, pecR_pitch: -8, pecL_pitch: -8 } },
@@ -318,6 +329,7 @@ const GUARD_HIGH: PoseClip = {
 /**
  * 앉아 막기(guard-low): 하단을 막는다. 몸통·머리를 앞으로 깊이 숙여 웅크리고(주둥이 높이 2.56 → 약 2.0 m),
  * 가슴지느러미를 앞 아래로 내려 꼬리·신발 앞을 가린다.
+ * 하단은 앉아야 막을 수 있으므로 앉은 자세(crouch)에서 시작해 앉은 자세로 끝난다 — 서 있다가 막는 순간 일어섰다 다시 앉지 않게
  */
 const GUARD_DOWN = { trunkPitch: 38, headPitch: 28, pecR_yaw: -18, pecL_yaw: -18, pecR_pitch: -34, pecL_pitch: -32, pecR_elbow: -10, pecL_elbow: -10, tailSide: 0 };
 const GUARD_LOW: PoseClip = {
@@ -326,13 +338,25 @@ const GUARD_LOW: PoseClip = {
   loop: false,
   skid: [5, 11],
   keys: [
-    { f: 0, pose: { slide: 0 } },
-    { f: 4, pose: { ...GUARD_DOWN, slide: 0 } },
+    { f: 0, pose: { ...GUARD_DOWN, slide: 0 } },
     { f: 5, pose: { slide: 0 } },
     { f: 7, pose: { trunkPitch: 33, headPitch: 22, pecR_pitch: -26, pecL_pitch: -24, pecR_elbow: -2, pecL_elbow: -2 }, ease: 'out' },
     { f: 11, pose: { ...GUARD_DOWN, slide: -GUARD_PUSH } },
-    { f: 17, pose: { slide: -GUARD_PUSH } },
-    { f: 25, pose: { trunkPitch: 0, headPitch: 0, pecR_yaw: 0, pecL_yaw: 0, pecR_pitch: 0, pecL_pitch: 0, pecR_elbow: 0, pecL_elbow: 0 } },
+    { f: 25, pose: { slide: -GUARD_PUSH } },
+  ],
+};
+
+/**
+ * 앉기(crouch): 아래를 누르고 있는 동안 반복. 앉아 막기와 같은 웅크린 자세에서 숨 쉬듯 조금 들썩인다.
+ * 두 점 접지는 그대로라(몸통·머리 굽힘만) 발이 움직이지 않는다.
+ */
+const CROUCH: PoseClip = {
+  name: 'crouch',
+  length: 60,
+  loop: true,
+  keys: [
+    { f: 0, pose: { ...GUARD_DOWN } },
+    { f: 30, pose: { trunkPitch: 35, headPitch: 25, pecR_pitch: -30, pecL_pitch: -29, pecR_elbow: -6, pecL_elbow: -7 } },
   ],
 };
 
@@ -485,6 +509,7 @@ export const CLIPS: Record<string, PoseClip> = {
   'hit-low': HIT_LOW,
   'guard-high': GUARD_HIGH,
   'guard-low': GUARD_LOW,
+  crouch: CROUCH,
   knockdown: KNOCKDOWN,
   down: DOWN,
   'wake-up': WAKE_UP,

@@ -243,6 +243,11 @@ if (params.get('check') === '1') {
       for (const name of animator.sockets.keys()) probe[name] = animator.socketPosition(name).toArray().map((v) => +v.toFixed(3));
       const c = animator.contactReport();
       probe.contact = [c.tailY, c.shoeY, c.tail.x, c.tail.z, c.shoe.x, c.shoe.z, c.bodyY].map((v) => +v.toFixed(3));
+      // 피격 캡슐 가운데 (밀어내기 기준인 몸통 가운데가 발보다 얼마나 앞뒤인지 볼 때)
+      for (const box of animator.hurtboxes) {
+        const [a, b] = capsuleSegment(box);
+        probe[`box:${box.name}`] = model.worldToLocal(a.add(b).multiplyScalar(0.5)).toArray().map((v) => +v.toFixed(3));
+      }
       // 바닥에 가장 가까운 소켓 5개 (누운 자세에서 무엇이 몸을 받치는지)
       const all: [string, Vector3][] = [];
       model.traverse((o) => {

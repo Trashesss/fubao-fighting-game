@@ -6,6 +6,8 @@
 |---|---|
 | `render/shoot.sh` | 뷰어를 헤드리스 Chrome 으로 찍기 (`Q`, `W`, `H` 환경변수) |
 | `render/check.sh` | 곡률·동작 접지 검사 JSON (`npm run check`) |
+| `render/practice-check.sh` | 연습 모드 프레임 자동 검사 JSON (기술마다 실제 판, 이득 측정 = 계산) |
+| `render/practice-shot.sh` | 연습 모드 찍기 (`script=b2@1&stop=20` 같은 입력 대본) |
 | `render/contact_sheet.py` | 여러 장을 비교 시트로 |
 | `render/grid_crop.py` | 확대 + 좌표 격자 (사진 좌표 읽기용) |
 | `reference/segment_photo.py` | 사진에서 상어 마스크 |
