@@ -1,0 +1,14 @@
+Anatomical reference sheet of a real adult female giant panda (Ailuropoda melanoleuca) standing upright on its hind legs, the way a bear stands up to look around.
+Two views side by side on one plain light-gray studio background, same scale, same flat ground line, orthographic camera, full body visible with margin:
+SIDE profile view facing right (left half), FRONT view (right half).
+
+Anatomy (important, keep it a real animal, not a cartoon or costume):
+- Plantigrade hind feet resting flat on the ground, heels down, short thick hind legs slightly bent at the knee.
+- Heavy rounded barrel-shaped body, wide hips, body held nearly vertical, slight forward lean.
+- Large round head with very broad cheeks, short muzzle, black nose, small rounded black ears on top.
+- Black eye patches shaped like tilted teardrops around small dark eyes.
+- Black forelimbs and hind limbs; black band over the shoulders connecting the two forelimbs across the back; the rest of the body creamy white; short white tail.
+- Forelimbs relaxed and slightly forward at chest height, paws with five short curved claws.
+- Thick dense fur, realistic photographic fur detail.
+
+Style: photorealistic wildlife reference, neutral soft even studio lighting, no props, no clothing, no accessories, no text, no labels, no logos.

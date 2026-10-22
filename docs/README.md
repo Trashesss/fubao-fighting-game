@@ -15,6 +15,7 @@
 | [05-quality-gates.md](05-quality-gates.md) | 품질 검사 도구와 기준, 검토 절차 | **무엇을 고치든 커밋 전에** |
 | [06-roadmap.md](06-roadmap.md) | 진행 단계, 알려진 문제, 남은 결정 | 다음 할 일을 정할 때 |
 | [07-conventions.md](07-conventions.md) | 코드·좌표·커밋 규칙 | 코드를 쓰기 전에 |
+| [08-fubao-model.md](08-fubao-model.md) | 푸바오(판다) 모델·털·뼈대 | 푸바오를 고칠 때 |
 
 ## 빠른 시작
 
@@ -27,6 +28,11 @@ npm run build        # 타입 검사 + 빌드
 
 필요한 것: Node 20 이상, Google Chrome(헤드리스 스크린샷·검사), 사진 측정 도구를 쓸 때만 [uv](https://docs.astral.sh/uv/)
 (Python 3.10+ 와 pillow·numpy 를 `uv run --with` 로 그때그때 받는다. 시스템 Python 에 설치하지 않는다).
+
+## 푸바오 뷰어
+
+`http://localhost:5317/fubao.html` — `view=three-quarter|side|front|back|face|face-side|paw|foot|ref-side|ref-front`, `pose=stance`(격투 자세), `anim=idle`, `shells=0`(털 끄기), `mode=silhouette`, `weights=<뼈>`(가중치 보기), `bones={…}`, `set={채널 JSON}`.
+전체 목록은 `src/viewer/fubao.ts` 머리 주석.
 
 ## 연습 모드
 

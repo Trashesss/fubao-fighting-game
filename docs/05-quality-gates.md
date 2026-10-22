@@ -63,6 +63,19 @@
 화면 확인: `tools/render/practice-shot.sh out/kick.png 'shot=1&script=b2@1&stop=20&boxes=1&gap=0.9'`.
 같은 Chrome 프로필을 쓰므로 헤드리스 Chrome 을 **동시에 여러 개 띄우지 않는다** (하나만 찍힌다).
 
+### 푸바오 실루엣 — `tools/render/fubao-compare.sh`
+
+기준 그림(측면·정면)과 털 포함 실루엣 IoU. 처음 한 번 마스크를 만든다 (`panda_silhouette.py`, 스크립트 머리 주석).
+
+| 항목 | 기준 | 현재 |
+|---|---|---|
+| 측면 IoU (머리·몸통) | ≥ 0.85 | 0.885 · 0.897 |
+| 정면 IoU (전체) | ≥ 0.9 | 0.917 |
+| 측면 다리 | 참고만 | 0.799 — 기준 그림은 한 발을 내딛었고 바인드 포즈는 대칭 |
+
+겹침 그림 `out/fubao/cmp.png`: 빨강 = 모델에만(너무 큼), 파랑 = 그림에만(모자람). 고칠 부위를 찾고 `pandaAnatomy.ts` 의 그 부위 값을 바꾼다.
+확대 렌더도 본다: `tools/render/fubao-shot.sh out/fubao/face.png 'view=face'` (`face`, `face-side`, `paw`, `foot`, `back`, `pose=stance`).
+
 ## 2. 얼룩말 반사 렌더 — `mode=zebra`
 
 반사 방향의 y 성분으로 흑백 평행 줄을 그린다. **매끈한 곡면은 줄이 부드럽게 휘고, 출렁이거나 구겨진 곳은 줄이 꺾이거나 흔들린다.**
